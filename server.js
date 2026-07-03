@@ -1,14 +1,14 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser'); 
+const cookieParser = require('cookie-parser'); // 📱 Added to read device fingerprints
 const path = require('path');
-const mongoose = require('mongoose'); 
+const mongoose = require('mongoose'); // 🗄️ Upgraded: MongoDB database engine
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
-app.use(cookieParser()); 
+app.use(cookieParser()); // 📱 Activates cookie device-tracking system
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
@@ -19,19 +19,14 @@ const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/de_chi
 mongoose.connect(MONGODB_URI)
     .then(() => {
         console.log("Connected securely to MongoDB Database Vault!");
-        seedInitialEmployees(); 
+        seedInitialEmployees(); // Seeds your original staff if database is empty
     })
     .catch(err => console.error("Database connection failure:", err));
 
 // ==========================================
-// 📋 DEFINING DYNAMIC DATABASE VAULT STRUCTURES
+// 📋 DEFINING PERMANENT DATABASE VAULT STRUCTURES
 // ==========================================
-// 🕒 UPGRADED: Added requiredHours to the employee schema profile
-const employeeSchema = new mongoose.Schema({ 
-    id: String, 
-    name: String,
-    requiredHours: { type: Number, default: 10 } // Sets 10 as the fallback default
-});
+const employeeSchema = new mongoose.Schema({ id: String, name: String });
 const Employee = mongoose.model('Employee', employeeSchema);
 
 const logSchema = new mongoose.Schema({
@@ -43,7 +38,7 @@ const logSchema = new mongoose.Schema({
     checkOut: String,
     hoursWorked: String,
     flagged: Boolean,
-    deviceToken: String 
+    deviceToken: String // 📱 Stores the unique device fingerprint for this log
 });
 const AttendanceLog = mongoose.model('AttendanceLog', logSchema);
 
@@ -56,14 +51,14 @@ const reportSchema = new mongoose.Schema({
 });
 const AbsenceReport = mongoose.model('AbsenceReport', reportSchema);
 
-// 🔒 PRESERVED: Core staff with custom shift defaults attached
+// 🔒 PRESERVED: Your original core staff array
 async function seedInitialEmployees() {
     const count = await Employee.countDocuments();
     if (count === 0) {
         await Employee.insertMany([
-            { id: "EMP001", name: "John Doe", requiredHours: 10 },
-            { id: "EMP002", name: "Blessing Okafor", requiredHours: 10 },
-            { id: "EMP003", name: "Amara Musa", requiredHours: 8 } // Example: Amara on an 8hr shift
+            { id: "EMP001", name: "John Doe" },
+            { id: "EMP002", name: "Blessing Okafor" },
+            { id: "EMP003", name: "Amara Musa" }
         ]);
         console.log("Initial default staff records successfully seeded.");
     }
@@ -73,10 +68,12 @@ async function seedInitialEmployees() {
 // ⚙️ PRESERVED SYSTEM CONFIGURATIONS
 // ==========================================
 const CUTOFF_TIME = "21:00";   
+const REQUIRED_HOURS = 10;     
 const MAX_DISTANCE_KM = 0.5;   
 const STORE_LAT = 9.852912;     
 const STORE_LON = 8.853000;     
 
+// 🔒 PRESERVED: Your precise location calculation engine
 function getDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -93,7 +90,7 @@ const getTodayDate = () => new Date().toISOString().split('T')[0];
 // 📡 UPGRADED DATABASE API ENDPOINTS
 // ==========================================
 
-// 1. Fetch Employee Live Status
+// 1. Fetch Employee Live Status for UI Buttons
 app.get('/api/attendance/status/:empId', async (req, res) => {
     try {
         const { empId } = req.params;
@@ -111,7 +108,7 @@ app.get('/api/attendance/status/:empId', async (req, res) => {
     }
 });
 
-// 2. Process Employee Clocking Actions (WITH PERSONAL SHIFT CALCULATOR)
+// 2. Process Employee Clocking Actions (WITH DEVICE LOCK ANTI-FRAUD)
 app.post('/api/attendance', async (req, res) => {
     try {
         const { employeeId, action, lat, lon } = req.body;
@@ -127,13 +124,16 @@ app.post('/api/attendance', async (req, res) => {
         const distance = getDistance(STORE_LAT, STORE_LON, lat, lon);
         if (distance > MAX_DISTANCE_KM) return res.status(400).json({ success: false, message: "You must be at the supermarket premises." });
 
+        // 📱 Grab the device tracking token from browser cookies if it exists
         let deviceToken = req.cookies.de_chis_device_token;
+
         let log = await AttendanceLog.findOne({ id: employeeId, date: today });
 
         if (action === 'checkin') {
             if (log) return res.status(400).json({ success: false, message: "Already checked in today." });
             if (currentTimeString > CUTOFF_TIME) return res.status(400).json({ success: false, message: `Late! Cutoff was ${CUTOFF_TIME}.` });
 
+            // 📱 ANTI-CHEAT CHECK: Block device if already used by a friend today
             if (deviceToken) {
                 const deviceAlreadyUsedToday = await AttendanceLog.findOne({ date: today, deviceToken: deviceToken });
                 if (deviceAlreadyUsedToday) {
@@ -143,7 +143,10 @@ app.post('/api/attendance', async (req, res) => {
                     });
                 }
             } else {
+                // Generate a brand new unique digital fingerprint signature for this phone
                 deviceToken = 'dev_phone_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+                
+                // Drop the cookie cookie into their browser settings (lasts for 2 years)
                 res.cookie('de_chis_device_token', deviceToken, { 
                     maxAge: 2 * 365 * 24 * 60 * 60 * 1000, 
                     httpOnly: true,
@@ -151,6 +154,7 @@ app.post('/api/attendance', async (req, res) => {
                 });
             }
 
+            // Save the log linked to this phone's device signature
             await AttendanceLog.create({
                 id: employeeId,
                 name: employee.name,
@@ -176,13 +180,10 @@ app.post('/api/attendance', async (req, res) => {
             log.checkOut = now.toLocaleTimeString();
             log.hoursWorked = `${hoursWorked} hrs`;
             
-            // 🕒 UPGRADED MATH: Grabs this specific worker's shift target dynamically
-            const workerTargetHours = employee.requiredHours || 10;
-            
-            if (parseFloat(hoursWorked) < workerTargetHours) {
+            if (parseFloat(hoursWorked) < REQUIRED_HOURS) {
                 log.flagged = true;
                 await log.save();
-                return res.json({ success: true, message: `Goodbye, ${employee.name}! Shift completed, but flagged for leaving early (${hoursWorked}/${workerTargetHours} hours required).` });
+                return res.json({ success: true, message: `Goodbye, ${employee.name}! Shift completed, but flagged for leaving early (${hoursWorked}/${REQUIRED_HOURS} hours).` });
             }
 
             await log.save();
@@ -231,21 +232,17 @@ app.get('/api/admin/data', async (req, res) => {
     }
 });
 
-// 5. Register New Employee Record via Admin Panel (WITH SHIFT HOURS ASSIGNMENT)
+// 5. Register New Employee Record via Admin Panel
 app.post('/api/admin/register', async (req, res) => {
     try {
-        // 🕒 UPGRADED: Backend now parses the requested target shift hours from the admin dashboard form
-        const { id, name, requiredHours } = req.body;
+        const { id, name } = req.body;
         if (!id || !name) return res.status(400).json({ success: false, message: "All fields are required." });
         
         const trackingCheck = await Employee.findOne({ id });
         if (trackingCheck) return res.status(400).json({ success: false, message: "ID exists." });
         
-        // Formulate final parsed number or default safely to 10
-        const finalHours = requiredHours ? parseFloat(requiredHours) : 10;
-        
-        await Employee.create({ id, name, requiredHours: finalHours });
-        res.json({ success: true, message: `Employee ${name} registered successfully with a ${finalHours}-hour required shift.` });
+        await Employee.create({ id, name });
+        res.json({ success: true, message: "Employee registered successfully." });
     } catch (err) {
         res.status(500).json({ success: false, message: "Database registration failure." });
     }
