@@ -60,7 +60,7 @@
     </div>
 
     <div class="card">
-        <h2>Live Attendance Streams Log (10-Hour Requirement Monitoring)</h2>
+        <h2>Live Attendance Streams Log (Monitoring Panel)</h2>
         <table id="logsTable">
             <thead>
                 <tr><th>Date</th><th>ID</th><th>Name</th><th>Checked In</th><th>Checked Out</th><th>Total Duration</th><th>Status</th></tr>
@@ -85,39 +85,73 @@
     }
 
     async function loadDashboardData() {
-        const res = await fetch('/api/admin/data');
-        const data = await res.json();
-        
-        document.querySelector('#rosterTable tbody').innerHTML = data.employeeList.map(e => `<tr><td>${e.id}</td><td>${e.name}</td></tr>`).join('');
-        
-        document.querySelector('#absenceTable tbody').innerHTML = data.absenceReports.map(a => `
-            <tr><td>${a.date}</td><td>${a.id}</td><td>${a.name}</td><td><strong>${a.reason}</strong></td><td>${a.submittedAt}</td></tr>
-        `).join('');
+        try {
+            const res = await fetch('/api/admin/data');
+            const data = await res.json();
+            
+            // Safe rendering check to support flexible database names
+            const employees = data.employeeList || data.workers || data.employees || [];
+            const logs = data.logs || [];
+            const absenceReports = data.absenceReports || [];
 
-        document.querySelector('#logsTable tbody').innerHTML = data.logs.map(l => `
-            <tr class="${l.flagged ? 'flagged' : ''}">
-                <td>${l.date}</td><td>${l.id}</td><td>${l.name}</td><td>${l.checkIn}</td>
-                <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
-                <td>${l.hoursWorked ? l.hoursWorked : '--'}</td>
-                <td>${l.flagged ? '⚠️ FLAGGED EARLY DEPARTURE' : (l.checkOut ? 'Good Shift' : 'Working')}</td>
-            </tr>
-        `).join('');
+            document.querySelector('#rosterTable tbody').innerHTML = employees.map(e => `
+                <tr><td>${e.id}</td><td>${e.name}</td></tr>
+            `).join('');
+            
+            document.querySelector('#absenceTable tbody').innerHTML = absenceReports.map(a => `
+                <tr><td>${a.date}</td><td>${a.id}</td><td>${a.name}</td><td><strong>${a.reason}</strong></td><td>${a.submittedAt}</td></tr>
+            `).join('');
+
+            document.querySelector('#logsTable tbody').innerHTML = logs.map(l => `
+                <tr class="${l.flagged ? 'flagged' : ''}">
+                    <td>${l.date}</td><td>${l.id}</td><td>${l.name}</td><td>${l.checkIn}</td>
+                    <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
+                    <td>${l.hoursWorked ? l.hoursWorked : '--'}</td>
+                    <td>${l.flagged ? '⚠️ FLAGGED EARLY DEPARTURE' : (l.checkOut ? 'Good Shift' : 'Working')}</td>
+                </tr>
+            `).join('');
+        } catch (err) {
+            console.error("Dashboard failed to reload automatically:", err);
+        }
     }
 
     async function registerEmployee() {
         const id = document.getElementById('newId').value.trim();
         const name = document.getElementById('newName').value.trim();
         const requiredHours = document.getElementById('requiredHours').value;
-        if(!id || !name) return alert("Fill in parameters");
-        const res = await fetch('/api/admin/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, name,body: JSON.stringify({ id: employeeId, name: employeeName, requiredHours: requiredHours }) })
-        });
-        const data = await res.json();
-        if(data.success) loadDashboardData();
+        
+        if(!id || !name) return alert("Please fill in both ID and Name parameters!");
+
+        // 🌟 FIXED: Cleaned up the nested payload structure completely
+        const payload = { 
+            id: id, 
+            name: name, 
+            requiredHours: requiredHours ? parseFloat(requiredHours) : 10 
+        };
+
+        try {
+            const res = await fetch('/api/admin/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            
+            alert(data.message);
+            
+            if(data.success) {
+                // Clear the input fields for the next entries
+                document.getElementById('newId').value = '';
+                document.getElementById('newName').value = '';
+                document.getElementById('requiredHours').value = '';
+                loadDashboardData();
+            }
+        } catch (err) {
+            alert("Could not connect to the server to add worker.");
+        }
     }
 
+    // Dynamic background data streaming triggers
     setInterval(loadDashboardData, 3000);
     loadDashboardData();
 </script>
