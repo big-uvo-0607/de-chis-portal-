@@ -2,29 +2,29 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser'); // 📱 Added to read device fingerprints
 const path = require('path');
-const mongoose = require('mongoose');
+const mongoose = require('mongoose'); // 🗄️ Upgraded: MongoDB database engine
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
-app.use(cookieParser()); // 📱 Activates cookie tracking system
+app.use(cookieParser()); // 📱 Activates cookie device-tracking system
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
-// CONNECT TO MONGO_DB CLOUD VAULT
+// 🗄️ CONNECT TO MONGO_DB CLOUD VAULT
 // ==========================================
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/de_chis_store";
 
 mongoose.connect(MONGODB_URI)
     .then(() => {
         console.log("Connected securely to MongoDB Database Vault!");
-        seedInitialEmployees();
+        seedInitialEmployees(); // Seeds your original staff if database is empty
     })
     .catch(err => console.error("Database connection failure:", err));
 
 // ==========================================
-// DEFINING PERMANENT SCHEMAS
+// 📋 DEFINING PERMANENT DATABASE VAULT STRUCTURES
 // ==========================================
 const employeeSchema = new mongoose.Schema({ id: String, name: String });
 const Employee = mongoose.model('Employee', employeeSchema);
@@ -51,6 +51,7 @@ const reportSchema = new mongoose.Schema({
 });
 const AbsenceReport = mongoose.model('AbsenceReport', reportSchema);
 
+// 🔒 PRESERVED: Your original core staff array
 async function seedInitialEmployees() {
     const count = await Employee.countDocuments();
     if (count === 0) {
@@ -64,7 +65,7 @@ async function seedInitialEmployees() {
 }
 
 // ==========================================
-// ⚙️ SYSTEM CONFIGURATIONS
+// ⚙️ PRESERVED SYSTEM CONFIGURATIONS
 // ==========================================
 const CUTOFF_TIME = "21:00";   
 const REQUIRED_HOURS = 10;     
@@ -72,6 +73,7 @@ const MAX_DISTANCE_KM = 0.5;
 const STORE_LAT = 9.852912;     
 const STORE_LON = 8.853000;     
 
+// 🔒 PRESERVED: Your precise location calculation engine
 function getDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -85,10 +87,10 @@ function getDistance(lat1, lon1, lat2, lon2) {
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
 // ==========================================
-// 📡 ASYNC UPGRADED API ENDPOINTS
+// 📡 UPGRADED DATABASE API ENDPOINTS
 // ==========================================
 
-// 1. Fetch Employee Live Status
+// 1. Fetch Employee Live Status for UI Buttons
 app.get('/api/attendance/status/:empId', async (req, res) => {
     try {
         const { empId } = req.params;
@@ -106,7 +108,7 @@ app.get('/api/attendance/status/:empId', async (req, res) => {
     }
 });
 
-// 2. Process Employee Clocking Actions (WITH DEVICE LOCK MECHANISM)
+// 2. Process Employee Clocking Actions (WITH DEVICE LOCK ANTI-FRAUD)
 app.post('/api/attendance', async (req, res) => {
     try {
         const { employeeId, action, lat, lon } = req.body;
@@ -131,9 +133,8 @@ app.post('/api/attendance', async (req, res) => {
             if (log) return res.status(400).json({ success: false, message: "Already checked in today." });
             if (currentTimeString > CUTOFF_TIME) return res.status(400).json({ success: false, message: `Late! Cutoff was ${CUTOFF_TIME}.` });
 
-            // 📱 CRITICAL DEVICE ANTI-CHEAT VERIFICATION
+            // 📱 ANTI-CHEAT CHECK: Block device if already used by a friend today
             if (deviceToken) {
-                // Check if this specific phone has already been logged under ANY worker's ID today
                 const deviceAlreadyUsedToday = await AttendanceLog.findOne({ date: today, deviceToken: deviceToken });
                 if (deviceAlreadyUsedToday) {
                     return res.status(400).json({ 
@@ -142,10 +143,10 @@ app.post('/api/attendance', async (req, res) => {
                     });
                 }
             } else {
-                // If the phone has no token cookie yet, generate a brand new unique signature
+                // Generate a brand new unique digital fingerprint signature for this phone
                 deviceToken = 'dev_phone_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
                 
-                // Drop the cookie into their browser settings (lasts for 2 years)
+                // Drop the cookie cookie into their browser settings (lasts for 2 years)
                 res.cookie('de_chis_device_token', deviceToken, { 
                     maxAge: 2 * 365 * 24 * 60 * 60 * 1000, 
                     httpOnly: true,
@@ -153,7 +154,7 @@ app.post('/api/attendance', async (req, res) => {
                 });
             }
 
-            // Save the check-in log along with the unique device tracking string
+            // Save the log linked to this phone's device signature
             await AttendanceLog.create({
                 id: employeeId,
                 name: employee.name,
@@ -218,7 +219,7 @@ app.post('/api/absence-report', async (req, res) => {
     }
 });
 
-// 4. Fetch Master Matrix Logs for Admin Dashboard
+// 4. Fetch Master Matrix Logs for Admin Dashboard Panels
 app.get('/api/admin/data', async (req, res) => {
     try {
         const logs = await AttendanceLog.find({});
