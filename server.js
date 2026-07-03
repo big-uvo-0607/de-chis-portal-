@@ -1,14 +1,12 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser'); // 📱 Added to read device fingerprints
 const path = require('path');
-const mongoose = require('mongoose');
+const mongoose = require('mongoose'); // Upgraded: Removed 'fs', added database engine
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
-app.use(cookieParser()); // 📱 Activates cookie tracking system
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
@@ -19,12 +17,12 @@ const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/de_chi
 mongoose.connect(MONGODB_URI)
     .then(() => {
         console.log("Connected securely to MongoDB Database Vault!");
-        seedInitialEmployees();
+        seedInitialEmployees(); // Seeds original staff if database is empty
     })
     .catch(err => console.error("Database connection failure:", err));
 
 // ==========================================
-// DEFINING PERMANENT SCHEMAS
+// DEFINING PERMANENT SCHEMAS (VAULT STRUCTURES)
 // ==========================================
 const employeeSchema = new mongoose.Schema({ id: String, name: String });
 const Employee = mongoose.model('Employee', employeeSchema);
@@ -37,8 +35,7 @@ const logSchema = new mongoose.Schema({
     checkInRaw: Number,
     checkOut: String,
     hoursWorked: String,
-    flagged: Boolean,
-    deviceToken: String // 📱 Stores the unique device fingerprint for this log
+    flagged: Boolean
 });
 const AttendanceLog = mongoose.model('AttendanceLog', logSchema);
 
@@ -51,6 +48,7 @@ const reportSchema = new mongoose.Schema({
 });
 const AbsenceReport = mongoose.model('AbsenceReport', reportSchema);
 
+// Helper function to seed original employees on a brand-new database setup
 async function seedInitialEmployees() {
     const count = await Employee.countDocuments();
     if (count === 0) {
@@ -72,6 +70,7 @@ const MAX_DISTANCE_KM = 0.5;
 const STORE_LAT = 9.852912;     
 const STORE_LON = 8.853000;     
 
+// Geolocation calculation helper
 function getDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -88,7 +87,7 @@ const getTodayDate = () => new Date().toISOString().split('T')[0];
 // 📡 ASYNC UPGRADED API ENDPOINTS
 // ==========================================
 
-// 1. Fetch Employee Live Status
+// 1. Fetch Employee Live Status for Dynamic UI Buttons
 app.get('/api/attendance/status/:empId', async (req, res) => {
     try {
         const { empId } = req.params;
@@ -106,7 +105,7 @@ app.get('/api/attendance/status/:empId', async (req, res) => {
     }
 });
 
-// 2. Process Employee Clocking Actions (WITH DEVICE LOCK MECHANISM)
+// 2. Process Employee Clocking Actions
 app.post('/api/attendance', async (req, res) => {
     try {
         const { employeeId, action, lat, lon } = req.body;
@@ -122,38 +121,12 @@ app.post('/api/attendance', async (req, res) => {
         const distance = getDistance(STORE_LAT, STORE_LON, lat, lon);
         if (distance > MAX_DISTANCE_KM) return res.status(400).json({ success: false, message: "You must be at the supermarket premises." });
 
-        // 📱 Grab the device tracking token from browser cookies if it exists
-        let deviceToken = req.cookies.de_chis_device_token;
-
         let log = await AttendanceLog.findOne({ id: employeeId, date: today });
 
         if (action === 'checkin') {
             if (log) return res.status(400).json({ success: false, message: "Already checked in today." });
             if (currentTimeString > CUTOFF_TIME) return res.status(400).json({ success: false, message: `Late! Cutoff was ${CUTOFF_TIME}.` });
 
-            // 📱 CRITICAL DEVICE ANTI-CHEAT VERIFICATION
-            if (deviceToken) {
-                // Check if this specific phone has already been logged under ANY worker's ID today
-                const deviceAlreadyUsedToday = await AttendanceLog.findOne({ date: today, deviceToken: deviceToken });
-                if (deviceAlreadyUsedToday) {
-                    return res.status(400).json({ 
-                        success: false, 
-                        message: "Security Alert: This device has already checked in a worker today. You cannot check in for friends!" 
-                    });
-                }
-            } else {
-                // If the phone has no token cookie yet, generate a brand new unique signature
-                deviceToken = 'dev_phone_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-                
-                // Drop the cookie into their browser settings (lasts for 2 years)
-                res.cookie('de_chis_device_token', deviceToken, { 
-                    maxAge: 2 * 365 * 24 * 60 * 60 * 1000, 
-                    httpOnly: true,
-                    sameSite: 'lax'
-                });
-            }
-
-            // Save the check-in log along with the unique device tracking string
             await AttendanceLog.create({
                 id: employeeId,
                 name: employee.name,
@@ -162,8 +135,7 @@ app.post('/api/attendance', async (req, res) => {
                 checkInRaw: now.getTime(), 
                 checkOut: null,
                 hoursWorked: null,
-                flagged: false,
-                deviceToken: deviceToken 
+                flagged: false
             });
 
             return res.json({ success: true, message: `Welcome, ${employee.name}!` });
@@ -189,7 +161,6 @@ app.post('/api/attendance', async (req, res) => {
             return res.json({ success: true, message: `Goodbye, ${employee.name}! Shift completed (${hoursWorked} hours).` });
         }
     } catch (err) {
-        console.error(err);
         res.status(500).json({ success: false, message: "Server encountered a clocking error." });
     }
 });
@@ -218,18 +189,26 @@ app.post('/api/absence-report', async (req, res) => {
     }
 });
 
-// 4. Fetch Master Matrix Logs for Admin Dashboard
+// 4. Fetch Master Matrix Logs for Admin Dashboard Panels
 app.get('/api/admin/data', async (req, res) => {
     try {
         const logs = await AttendanceLog.find({});
         const employeeList = await Employee.find({});
         const absenceReports = await AbsenceReport.find({});
         
-        res.json({ logs, employeeList, absenceReports });
+        // 🌟 FIX: We return employeeList under multiple names so your original frontend won't break!
+        res.json({ 
+            logs, 
+            employeeList, 
+            employees: employeeList, 
+            workers: employeeList, 
+            absenceReports 
+        });
     } catch (err) {
         res.status(500).json({ success: false, message: "Failed to compile database logs." });
     }
 });
+
 
 // 5. Register New Employee Record via Admin Panel
 app.post('/api/admin/register', async (req, res) => {

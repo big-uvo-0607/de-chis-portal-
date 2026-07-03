@@ -42,6 +42,7 @@
             <h2>Register New Worker</h2>
             <input type="text" id="newId" placeholder="Assign ID (e.g. EMP004)">
             <input type="text" id="newName" placeholder="Full Name">
+            <input type="number" id="requiredHours" placeholder="Shift Hours (e.g. 10)">
             <button onclick="registerEmployee()">Add Employee</button>
         </div>
         <div class="card">
@@ -106,11 +107,12 @@
     async function registerEmployee() {
         const id = document.getElementById('newId').value.trim();
         const name = document.getElementById('newName').value.trim();
+        const requiredHours = document.getElementById('requiredHours').value;
         if(!id || !name) return alert("Fill in parameters");
         const res = await fetch('/api/admin/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, name })
+            body: JSON.stringify({ id, name,body: JSON.stringify({ id: employeeId, name: employeeName, requiredHours: requiredHours }) })
         });
         const data = await res.json();
         if(data.success) loadDashboardData();
