@@ -1,0 +1,12 @@
+[
+  {
+    "id": "EMP001",
+    "name": "John Doe",
+    "date": "2026-07-02",
+    "checkIn": "5:32:47 PM",
+    "checkInRaw": 1783009967449,
+    "checkOut": null,
+    "hoursWorked": null,
+    "flagged": false
+  }
+]

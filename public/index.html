@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DE Chis Stores Portal</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body {
+            background: linear-gradient(180deg, #d4ecfc 0%, #d4ecfc 50%, #e2f7e4 50%, #e2f7e4 100%);
+            min-height: 100vh;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;
+            position: relative;
+        }
+        
+        /* Top Navigation Bar for Menu Actions */
+        .top-bar {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
+        .toggle-btn {
+            background: #c62828;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-weight: bold;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        h1 { color: #1a3a5f; margin-bottom: 25px; text-align: center; }
+        .portal-card {
+            background: #ffffff; padding: 35px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            width: 100%; max-width: 450px; border: 3px solid #1a3a5f; text-align: center; margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        label { display: block; font-weight: bold; color: #333; margin-bottom: 10px; font-size: 1.1rem; text-align: left; }
+        input[type="text"], textarea { width: 100%; padding: 12px; font-size: 1.1rem; border: 2px solid #1a3a5f; border-radius: 6px; margin-bottom: 15px; font-weight: bold; }
+        .btn-group { display: flex; gap: 15px; justify-content: center; }
+        button { width: 100%; padding: 15px; font-size: 1.1rem; font-weight: bold; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .btn-in { background-color: #2e7d32; display: none; }
+        .btn-out { background-color: #c62828; display: none; }
+        .btn-verify { background-color: #1a3a5f; }
+        #alertBox { margin-top: 15px; padding: 12px; border-radius: 6px; font-weight: bold; display: none; }
+        .error { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .success { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        .welcome-banner { font-size: 1.3rem; color: #2e7d32; font-weight: bold; margin-bottom: 15px; display: none; }
+        
+        /* Hidden layout container state */
+        .hidden-panel { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <button class="toggle-btn" onclick="toggleAbsenceForm()">Report Absence</button>
+    </div>
+
+    <h1>Welcome To DE Chis Stores Check IN portal</h1>
+
+    <div class="portal-card">
+        <label for="empId">Enter Employee ID:</label>
+        <input type="text" id="empId" placeholder="e.g. EMP001">
+        
+        <button id="verifyBtn" class="btn-verify" onclick="checkUserStatus()">Verify My Profile</button>
+        
+        <div id="welcomeMessage" class="welcome-banner"></div>
+
+        <div class="btn-group">
+            <button id="checkInBtn" class="btn-in" onclick="processAttendance('checkin')">Check In</button>
+            <button id="checkOutBtn" class="btn-out" onclick="processAttendance('checkout')">Check Out</button>
+        </div>
+        <div id="alertBox"></div>
+    </div>
+
+    <div id="absenceCard" class="portal-card hidden-panel" style="border-color: #c62828;">
+        <h3 style="color:#c62828; margin-bottom: 15px;">Report Absence</h3>
+        <input type="text" id="absentEmpId" placeholder="Your Employee ID">
+        <textarea id="absenceReason" rows="3" placeholder="State why you are absent today..."></textarea>
+        <button style="background:#c62828;" onclick="submitAbsence()">Submit Absence Ticket</button>
+        <div id="absenceAlert" style="margin-top:10px; display:none; padding:10px; border-radius:6px; font-weight:bold;"></div>
+    </div>
+
+    <script>
+        // Toggle Visibility of the Absence Form Container
+        function toggleAbsenceForm() {
+            const card = document.getElementById('absenceCard');
+            if (card.style.display === "block") {
+                card.style.display = "none";
+            } else {
+                card.style.display = "block";
+            }
+        }
+
+        async function checkUserStatus() {
+            const id = document.getElementById('empId').value.trim();
+            if(!id) return alert("Enter an ID first");
+            
+            const res = await fetch(`/api/attendance/status/${id}`);
+            const data = await res.json();
+            
+            const checkInBtn = document.getElementById('checkInBtn');
+            const checkOutBtn = document.getElementById('checkOutBtn');
+            const welcomeMessage = document.getElementById('welcomeMessage');
+
+            checkInBtn.style.display = "none";
+            checkOutBtn.style.display = "none";
+            welcomeMessage.style.display = "none";
+
+            if (data.status === "unregistered") {
+                showAlert("Access Denied: ID not registered.", "error");
+            } else if (data.status === "not_checked_in") {
+                checkInBtn.style.display = "block";
+                showAlert("Profile verified. Ready to check in.", "success");
+            } else if (data.status === "checked_in") {
+                welcomeMessage.innerText = `Welcome back, ${data.name}!`;
+                welcomeMessage.style.display = "block";
+                checkOutBtn.style.display = "block";
+                showAlert(`You checked in at ${data.checkInTime}.`, "success");
+            } else if (data.status === "completed") {
+                showAlert("You have already completed your actions for today.", "success");
+            }
+        }
+
+        function processAttendance(action) {
+            const employeeId = document.getElementById('empId').value.trim();
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => sendAttendance(employeeId, action, pos.coords.latitude, pos.coords.longitude),
+                    () => showAlert("Location access required.", "error")
+                );
+            } else {
+                showAlert("Geolocation unsupported.", "error");
+            }
+        }
+
+        async function sendAttendance(employeeId, action, lat, lon) {
+            const response = await fetch('/api/attendance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employeeId, action, lat, lon })
+            });
+            const data = await response.json();
+            if(data.success) {
+                showAlert(data.message, "success");
+                checkUserStatus(); 
+            } else {
+                showAlert(data.message, "error");
+            }
+        }
+
+        async function submitAbsence() {
+            const employeeId = document.getElementById('absentEmpId').value.trim();
+            const reason = document.getElementById('absenceReason').value.trim();
+            const box = document.getElementById('absenceAlert');
+            
+            if(!employeeId || !reason) return alert("Fill in your ID and reason!");
+
+            const res = await fetch('/api/absence-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employeeId, reason })
+            });
+            const data = await res.json();
+            
+            box.innerText = data.message;
+            box.style.display = "block";
+            box.className = data.success ? "success" : "error";
+            
+            if(data.success) {
+                document.getElementById('absentEmpId').value = "";
+                document.getElementById('absenceReason').value = "";
+                setTimeout(() => { toggleAbsenceForm(); }, 1500); // Auto close after 1.5 seconds
+            }
+        }
+
+        function showAlert(msg, type) {
+            const box = document.getElementById('alertBox');
+            box.innerText = msg; box.className = type; box.style.display = "block";
+        }
+    </script>
+</body>
+</html>
