@@ -1,36 +1,70 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser'); // 📱 Added: Essential for device anti-cheat token tracking
+const cookieParser = require('cookie-parser');
 const path = require('path');
-const mongoose = require('mongoose'); // Upgraded: Removed 'fs', added database engine
+const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ==========================================
+// 🔒 ADMIN AUTHENTICATION SHIELD (BASIC AUTH)
+// ==========================================
+function adminGuard(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        res.setHeader('WWW-Authenticate', 'Basic realm="DE Chis Stores Admin Dashboard"');
+        return res.status(401).send('Admin access denied. Please log in.');
+    }
+
+    const auth = Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(':');
+    const username = auth[0];
+    const password = auth[1];
+
+    // 🌟 CHANGE YOUR CREDENTIALS HERE FOR THE GOVERNOR'S VISIT:
+    if (username === 'admin' && password === 'chis1234') {
+        next();
+    } else {
+        res.setHeader('WWW-Authenticate', 'Basic realm="DE Chis Stores Admin Dashboard"');
+        return res.status(401).send('Invalid Admin Credentials.');
+    }
+}
+
+// Intercept the admin webpage before static files can serve it openly
+app.get('/admin.html', adminGuard);
+
 app.use(bodyParser.json());
-app.use(cookieParser()); // 📱 Added: Enables cookie parsing for security checking
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
 // CONNECT TO MONGO_DB CLOUD VAULT
 // ==========================================
+// 📱 CRITICAL: Stop mongoose from buffering/freezing requests when the database is offline
+mongoose.set('bufferCommands', false);
+
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/de_chis_store";
 
-mongoose.connect(MONGODB_URI)
+let isDatabaseConnected = false;
+
+mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 }) // Gives up waiting after 5 seconds instead of hanging
     .then(() => {
         console.log("Connected securely to MongoDB Database Vault!");
-        seedInitialEmployees(); // Seeds original staff if database is empty
+        isDatabaseConnected = true;
+        seedInitialEmployees();
     })
-    .catch(err => console.error("Database connection failure:", err));
+    .catch(err => {
+        console.error("❌ DATABASE CONFIGURATION ERROR:", err.message);
+        isDatabaseConnected = false;
+    });
 
 // ==========================================
-// DEFINING PERMANENT SCHEMAS (VAULT STRUCTURES)
+// DEFINING PERMANENT SCHEMAS
 // ==========================================
-// 🕒 UPGRADED: Added requiredHours directly to the employee profile structure
 const employeeSchema = new mongoose.Schema({ 
     id: String, 
     name: String,
-    requiredHours: { type: Number, default: 10 } // Automatically defaults to 10 if not specified
+    requiredHours: { type: Number, default: 10 }
 });
 const Employee = mongoose.model('Employee', employeeSchema);
 
@@ -43,7 +77,7 @@ const logSchema = new mongoose.Schema({
     checkOut: String,
     hoursWorked: String,
     flagged: Boolean,
-    deviceToken: String // 📱 Added: Tracks unique phone footprint to stop buddy clock-ins
+    deviceToken: String
 });
 const AttendanceLog = mongoose.model('AttendanceLog', logSchema);
 
@@ -56,28 +90,27 @@ const reportSchema = new mongoose.Schema({
 });
 const AbsenceReport = mongoose.model('AbsenceReport', reportSchema);
 
-// Helper function to seed original employees on a brand-new database setup
 async function seedInitialEmployees() {
-    const count = await Employee.countDocuments();
-    if (count === 0) {
-        await Employee.insertMany([
-            { id: "EMP001", name: "John Doe", requiredHours: 10 },
-            { id: "EMP002", name: "Blessing Okafor", requiredHours: 10 },
-            { id: "EMP003", name: "Amara Musa", requiredHours: 10 }
-        ]);
-        console.log("Initial default staff records successfully seeded.");
+    try {
+        const count = await Employee.countDocuments();
+        if (count === 0) {
+            await Employee.insertMany([
+                { id: "EMP001", name: "John Doe", requiredHours: 10 },
+                { id: "EMP002", name: "Blessing Okafor", requiredHours: 10 },
+                { id: "EMP003", name: "Amara Musa", requiredHours: 10 }
+            ]);
+            console.log("Initial default staff records successfully seeded.");
+        }
+    } catch(e) {
+        console.error("Failed to seed data structure:", e.message);
     }
 }
 
-// ==========================================
-// ⚙️ SYSTEM CONFIGURATIONS (PRESERVED ACCURATELY)
-// ==========================================
 const CUTOFF_TIME = "21:00";   
 const MAX_DISTANCE_KM = 0.5;   
 const STORE_LAT = 9.852912;     
 const STORE_LON = 8.853000;     
 
-// Geolocation calculation helper
 function getDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -90,11 +123,22 @@ function getDistance(lat1, lon1, lat2, lon2) {
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
+// Middleware helper to reject transactions instantly if the database link is broken
+app.use((req, res, next) => {
+    if (!isDatabaseConnected && req.path.startsWith('/api/')) {
+        return res.status(503).json({ 
+            success: false, 
+            message: "Database offline. Check your network or connection string!" 
+        });
+    }
+    next();
+});
+
 // ==========================================
-// 📡 ASYNC UPGRADED API ENDPOINTS
+// 📡 API ENDPOINTS
 // ==========================================
 
-// 1. Fetch Employee Live Status for Dynamic UI Buttons
+// 1. Fetch Employee Live Status
 app.get('/api/attendance/status/:empId', async (req, res) => {
     try {
         const { empId } = req.params;
@@ -108,11 +152,11 @@ app.get('/api/attendance/status/:empId', async (req, res) => {
         if (log && !log.checkOut) return res.json({ status: "checked_in", name: employee.name, checkInTime: log.checkIn });
         return res.json({ status: "completed", name: employee.name });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Server error checking status." });
+        res.status(500).json({ success: false, message: "Database read failure." });
     }
 });
 
-// 2. Process Employee Clocking Actions (WITH PERSONALIZED SHIFT SHIELD)
+// 2. Process Employee Clocking Actions
 app.post('/api/attendance', async (req, res) => {
     try {
         const { employeeId, action, lat, lon } = req.body;
@@ -128,7 +172,6 @@ app.post('/api/attendance', async (req, res) => {
         const distance = getDistance(STORE_LAT, STORE_LON, lat, lon);
         if (distance > MAX_DISTANCE_KM) return res.status(400).json({ success: false, message: "You must be at the supermarket premises." });
 
-        // 📱 ANTI-CHEAT: Check for or assign browser tracking fingerprint
         let deviceToken = req.cookies.de_chis_device_token;
         let log = await AttendanceLog.findOne({ id: employeeId, date: today });
 
@@ -136,23 +179,17 @@ app.post('/api/attendance', async (req, res) => {
             if (log) return res.status(400).json({ success: false, message: "Already checked in today." });
             if (currentTimeString > CUTOFF_TIME) return res.status(400).json({ success: false, message: `Late! Cutoff was ${CUTOFF_TIME}.` });
 
-            // 📱 Guard against multiple accounts using one phone on the same day
             if (deviceToken) {
                 const deviceAlreadyUsedToday = await AttendanceLog.findOne({ date: today, deviceToken: deviceToken });
                 if (deviceAlreadyUsedToday) {
                     return res.status(400).json({ 
                         success: false, 
-                        message: "Security Alert: This phone has already clocked in a worker today. Fraudulent tracking blocked!" 
+                        message: "Security Alert: Device matching active attendance log." 
                     });
                 }
             } else {
-                // Drop a permanent unique fingerprint cookie onto the worker's mobile device
                 deviceToken = 'chis_device_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-                res.cookie('de_chis_device_token', deviceToken, { 
-                    maxAge: 2 * 365 * 24 * 60 * 60 * 1000, 
-                    httpOnly: true,
-                    sameSite: 'lax'
-                });
+                res.cookie('de_chis_device_token', deviceToken, { maxAge: 2*365*24*60*60*1000, httpOnly: true, sameSite: 'lax'});
             }
 
             await AttendanceLog.create({
@@ -180,20 +217,19 @@ app.post('/api/attendance', async (req, res) => {
             log.checkOut = now.toLocaleTimeString();
             log.hoursWorked = `${hoursWorked} hrs`;
             
-            // 🕒 DYNAMIC CHECK: Look up this specific employee's allocated shift configuration
             const employeeTargetHours = employee.requiredHours || 10;
             
             if (parseFloat(hoursWorked) < employeeTargetHours) {
                 log.flagged = true;
                 await log.save();
-                return res.json({ success: true, message: `Goodbye, ${employee.name}! Shift completed, but flagged for leaving early (${hoursWorked}/${employeeTargetHours} hours required).` });
+                return res.json({ success: true, message: `Goodbye! Early Departure Flagged.` });
             }
 
             await log.save();
-            return res.json({ success: true, message: `Goodbye, ${employee.name}! Shift completed (${hoursWorked} hours).` });
+            return res.json({ success: true, message: `Goodbye, ${employee.name}! Shift completed.` });
         }
     } catch (err) {
-        res.status(500).json({ success: false, message: "Server encountered a clocking error." });
+        res.status(500).json({ success: false, message: "Database transaction failure." });
     }
 });
 
@@ -217,47 +253,37 @@ app.post('/api/absence-report', async (req, res) => {
 
         res.json({ success: true, message: "Absence report forwarded to Admin successfully." });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Server error reporting absence." });
+        res.status(500).json({ success: false, message: "Server database connection fault." });
     }
 });
 
-// 4. Fetch Master Matrix Logs for Admin Dashboard Panels
-app.get('/api/admin/data', async (req, res) => {
+// 4. Fetch Master Matrix Logs (PROTECTED)
+app.get('/api/admin/data', adminGuard, async (req, res) => {
     try {
         const logs = await AttendanceLog.find({});
         const employeeList = await Employee.find({});
         const absenceReports = await AbsenceReport.find({});
-        
-        // 🌟 SAFETY LINK: Returns employeeList under multiple names so your original frontend won't break!
-        res.json({ 
-            logs, 
-            employeeList, 
-            employees: employeeList, 
-            workers: employeeList, 
-            absenceReports 
-        });
+        res.json({ logs, employeeList, absenceReports });
     } catch (err) {
         res.status(500).json({ success: false, message: "Failed to compile database logs." });
     }
 });
 
-// 5. Register New Employee Record via Admin Panel (WITH SHIFT HOURS ASSIGNMENT)
-app.post('/api/admin/register', async (req, res) => {
+// 5. Register New Employee Record (PROTECTED)
+app.post('/api/admin/register', adminGuard, async (req, res) => {
     try {
-        // 🕒 UPGRADED: Destructures the dynamic shift hours value sent directly from admin.html
         const { id, name, requiredHours } = req.body;
         if (!id || !name) return res.status(400).json({ success: false, message: "All fields are required." });
         
         const trackingCheck = await Employee.findOne({ id });
         if (trackingCheck) return res.status(400).json({ success: false, message: "ID exists." });
         
-        // Formulate valid float configuration number or default cleanly back to 10
         const parsedHours = requiredHours ? parseFloat(requiredHours) : 10;
         
         await Employee.create({ id, name, requiredHours: parsedHours });
-        res.json({ success: true, message: `Employee ${name} registered successfully with a ${parsedHours}-hour shift rule.` });
+        res.json({ success: true, message: `Employee ${name} registered successfully.` });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Database registration failure." });
+        res.status(500).json({ success: false, message: "Database writing error." });
     }
 });
 
