@@ -66,7 +66,7 @@
         .sub-heading {
             color: #5c6f84;
             font-size: 1rem;
-            margin-bottom: 30px;
+            margin-bottom: 12px;
             font-weight: 500;
             z-index: 1;
         }
@@ -85,6 +85,7 @@
             align-items: center;
             gap: 8px;
             letter-spacing: 0.5px;
+            z-index: 1;
         }
 
         /* Announcement Board Banner */
@@ -156,6 +157,13 @@
         input[type="text"]::placeholder, textarea::placeholder {
             color: #94a3b8;
             font-weight: 500;
+        }
+
+        /* Error Shake Animation Spark */
+        .shake-error {
+            animation: shake 0.4s ease;
+            border-color: #e63946 !important;
+            box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.15) !important;
         }
 
         .btn-group { display: flex; gap: 15px; justify-content: center; width: 100%; }
@@ -235,6 +243,11 @@
             from { opacity: 0; transform: scale(0.98); }
             to { opacity: 1; transform: scale(1); }
         }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
         @keyframes pulseGreen {
             0% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.4); }
             70% { box-shadow: 0 0 0 10px rgba(46, 125, 50, 0); }
@@ -255,6 +268,11 @@
 
     <h1>DE Chis Stores Portal</h1>
     <div class="sub-heading">Employee Digital Access Station</div>
+
+    <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(46, 125, 50, 0.08); color: #2e7d32; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; margin-bottom: 20px; z-index: 1;">
+        <span style="width: 8px; height: 8px; background-color: #2e7d32; border-radius: 50%; display: inline-block; animation: pulseGreen 1.5s infinite;"></span>
+        Secure Cloud Database Connected
+    </div>
 
     <div class="clock-widget">
         <span>📅 <span id="liveDate">Loading...</span></span>
@@ -290,21 +308,17 @@
     </div>
 
     <script>
-        // SPARK 2: Core Engine For Live Ticking Clock and Current Date
+        // SPARK: Core Engine For Live Ticking Clock and Current Date
         function startLiveClock() {
             setInterval(() => {
                 const now = new Date();
-                
-                // Format Time beautifully
                 document.getElementById('liveClock').innerText = now.toLocaleTimeString();
-                
-                // Format Date clean and clear
                 const options = { weekday: 'short', month: 'short', day: 'numeric' };
                 document.getElementById('liveDate').innerText = now.toLocaleDateString('en-US', options);
             }, 1000);
         }
 
-        // SPARK 3: Time-of-Day Smart Greeting Generator
+        // SPARK: Time-of-Day Smart Greeting Generator
         function getTimeOfDayGreeting(employeeName) {
             const currentHour = new Date().getHours();
             let greetingMessage = "";
@@ -330,34 +344,59 @@
         }
 
         async function checkUserStatus() {
-            const id = document.getElementById('empId').value.trim();
-            if(!id) return alert("Enter an ID first");
+            const inputField = document.getElementById('empId');
+            const id = inputField.value.trim();
             
-            const res = await fetch(`/api/attendance/status/${id}`);
-            const data = await res.json();
-            
-            const checkInBtn = document.getElementById('checkInBtn');
-            const checkOutBtn = document.getElementById('checkOutBtn');
-            const welcomeMessage = document.getElementById('welcomeMessage');
-
-            checkInBtn.style.display = "none";
-            checkOutBtn.style.display = "none";
-            welcomeMessage.style.display = "none";
-
-            if (data.status === "unregistered") {
-                showAlert("Access Denied: ID not registered inside store database.", "error");
-            } else if (data.status === "not_checked_in") {
-                checkInBtn.style.display = "block";
-                showAlert("Profile authenticated successfully. Ready to record session.", "success");
-            } else if (data.status === "checked_in") {
-                // Applied Spark 3 Here
-                welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
-                welcomeMessage.style.display = "block";
-                checkOutBtn.style.display = "block";
-                showAlert(`Active shift log started at ${data.checkInTime}.`, "success");
-            } else if (data.status === "completed") {
-                showAlert("Shift workflow completely finished for today. Thank you!", "success");
+            // SPARK: Form field shake error handling
+            if(!id) {
+                inputField.classList.add('shake-error');
+                setTimeout(() => inputField.classList.remove('shake-error'), 400);
+                return;
             }
+            
+            const verifyBtn = document.getElementById('verifyBtn');
+            const originalText = verifyBtn.innerText;
+            
+            // SPARK: Simulated Processing Engine State
+            verifyBtn.innerText = "⏳ Authenticating with Cloud...";
+            verifyBtn.style.opacity = "0.7";
+            verifyBtn.disabled = true;
+
+            setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/attendance/status/${id}`);
+                    const data = await res.json();
+                    
+                    const checkInBtn = document.getElementById('checkInBtn');
+                    const checkOutBtn = document.getElementById('checkOutBtn');
+                    const welcomeMessage = document.getElementById('welcomeMessage');
+
+                    checkInBtn.style.display = "none";
+                    checkOutBtn.style.display = "none";
+                    welcomeMessage.style.display = "none";
+
+                    if (data.status === "unregistered") {
+                        showAlert("Access Denied: ID not registered inside store database.", "error");
+                    } else if (data.status === "not_checked_in") {
+                        checkInBtn.style.display = "block";
+                        showAlert("Profile authenticated successfully. Ready to record session.", "success");
+                    } else if (data.status === "checked_in") {
+                        welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
+                        welcomeMessage.style.display = "block";
+                        checkOutBtn.style.display = "block";
+                        showAlert(`Active shift log started at ${data.checkInTime}.`, "success");
+                    } else if (data.status === "completed") {
+                        showAlert("Shift workflow completely finished for today. Thank you!", "success");
+                    }
+                } catch (err) {
+                    showAlert("Network fault: Couldn't establish a link to the Render backend server.", "error");
+                } finally {
+                    // Restore button state
+                    verifyBtn.innerText = originalText;
+                    verifyBtn.style.opacity = "1";
+                    verifyBtn.disabled = false;
+                }
+            }, 600); // 600ms micro-delay to show the authentication transition loop
         }
 
         function processAttendance(action) {
@@ -433,7 +472,6 @@
             }
         }
 
-        // Initialize all active custom features on DOM load
         window.addEventListener('DOMContentLoaded', () => {
             startLiveClock();
             checkStoreAnnouncements();
