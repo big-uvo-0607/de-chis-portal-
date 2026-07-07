@@ -24,7 +24,6 @@ function adminGuard(req, res, next) {
     const username = auth[0];
     const password = auth[1];
 
-    // 🌟 CHANGE YOUR CREDENTIALS HERE FOR THE GOVERNOR'S VISIT:
     if (username === 'admin' && password === 'chis1234') {
         next();
     } else {
@@ -43,14 +42,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ==========================================
 // CONNECT TO MONGO_DB CLOUD VAULT
 // ==========================================
-// 📱 CRITICAL: Stop mongoose from buffering/freezing requests when the database is offline
 mongoose.set('bufferCommands', false);
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/de_chis_store";
 
 let isDatabaseConnected = false;
 
-mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 }) // Gives up waiting after 5 seconds instead of hanging
+mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
     .then(() => {
         console.log("Connected securely to MongoDB Database Vault!");
         isDatabaseConnected = true;
@@ -126,7 +124,6 @@ function getDistance(lat1, lon1, lat2, lon2) {
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-// Middleware helper to reject transactions instantly if the database link is broken
 app.use((req, res, next) => {
     if (!isDatabaseConnected && req.path.startsWith('/api/')) {
         return res.status(503).json({ 
@@ -140,6 +137,11 @@ app.use((req, res, next) => {
 // ==========================================
 // 📡 API ENDPOINTS
 // ==========================================
+
+// 🌟 NEW: Public endpoint for workers to fetch the notice without basic auth passwords
+app.get('/api/notice', (req, res) => {
+    res.json({ notice: currentStoreNotice });
+});
 
 // 1. Fetch Employee Live Status
 app.get('/api/attendance/status/:empId', async (req, res) => {
@@ -260,14 +262,13 @@ app.post('/api/absence-report', async (req, res) => {
     }
 });
 
-// 4. Fetch Master Matrix Logs (PROTECTED - UPDATED FOR DIGITAL NOTICE BOARD)
+// 4. Fetch Master Matrix Logs (PROTECTED)
 app.get('/api/admin/data', adminGuard, async (req, res) => {
     try {
         const logs = await AttendanceLog.find({});
         const employeeList = await Employee.find({});
         const absenceReports = await AbsenceReport.find({});
         
-        // Added currentNotice payload so the admin dashboard analytics layout can display it cleanly
         res.json({ 
             logs, 
             employeeList, 
@@ -297,7 +298,7 @@ app.post('/api/admin/register', adminGuard, async (req, res) => {
     }
 });
 
-// 6. Broadcast New Notice Board Announcement (PROTECTED - NEW FEATURE)
+// 6. Broadcast New Notice Board Announcement (PROTECTED)
 app.post('/api/admin/notice', adminGuard, (req, res) => {
     const { notice } = req.body;
     if (!notice || !notice.trim()) {

@@ -60,6 +60,11 @@
 
     <h1>Welcome To DE Chis Stores Check IN portal</h1>
 
+    <!-- FEATURE: LIVE INTERACTIVE ANNOUNCEMENT BANNER -->
+    <div id="noticeBanner" style="background: #fff3cd; color: #856404; padding: 15px; margin-bottom: 20px; border-radius: 6px; border: 1px solid #ffeeba; display: none; text-align: center; font-weight: bold; font-size: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); width: 100%; max-width: 450px;">
+        📢 STORE NOTICE: <span id="noticeContent" style="font-weight: normal; margin-left: 5px;">Loading announcements...</span>
+    </div>
+
     <div class="portal-card">
         <label for="empId">Enter Employee ID:</label>
         <input type="text" id="empId" placeholder="e.g. EMP001">
@@ -180,6 +185,27 @@
             const box = document.getElementById('alertBox');
             box.innerText = msg; box.className = type; box.style.display = "block";
         }
+
+        // FEATURE ENGINE: Automatically fetch and display active notices for workers
+        async function checkStoreAnnouncements() {
+            try {
+                const res = await fetch('/api/notice');
+                const data = await res.json();
+                
+                // Only show the banner if there is an active notice that isn't the default message
+                if (data.notice && data.notice !== "Welcome to DE Chis Stores Portal!") {
+                    document.getElementById('noticeContent').innerText = data.notice;
+                    document.getElementById('noticeBanner').style.display = 'block';
+                } else {
+                    document.getElementById('noticeBanner').style.display = 'none';
+                }
+            } catch (err) {
+                console.log("Notice board engine currently sleeping.");
+            }
+        }
+
+        // Trigger notice check when the browser finishes loading the screen structure
+        window.addEventListener('DOMContentLoaded', checkStoreAnnouncements);
     </script>
 </body>
 </html>
