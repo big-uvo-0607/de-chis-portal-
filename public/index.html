@@ -5,242 +5,235 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DE Chis Stores Portal</title>
     <style>
+        /* Modern System Design Variables (Light Mode Default) */
+        :root {
+            --bg-gradient: linear-gradient(135deg, #f4f9ff 0%, #eef2f7 50%, #e6f4ea 100%);
+            --card-bg: rgba(255, 255, 255, 0.7);
+            --card-border: rgba(26, 58, 95, 0.08);
+            --text-primary: #1a3a5f;
+            --text-secondary: #5c6f84;
+            --input-bg: #f8fafc;
+            --input-border: #e2e8f0;
+            --shadow-main: 0 15px 35px rgba(26, 58, 95, 0.06), 0 5px 15px rgba(0, 0, 0, 0.02);
+            --shadow-hover: 0 22px 45px rgba(26, 58, 95, 0.12);
+            --glass-blur: blur(14px);
+        }
+
+        /* Silicon Valley Midnight Theme Variant */
+        .dark-theme {
+            --bg-gradient: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #071414 100%);
+            --card-bg: rgba(17, 24, 39, 0.65);
+            --card-border: rgba(255, 255, 255, 0.07);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --input-bg: #1f2937;
+            --input-border: #374151;
+            --shadow-main: 0 20px 40px rgba(0, 0, 0, 0.4);
+            --shadow-hover: 0 25px 50px rgba(0, 0, 0, 0.55);
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
         body {
-            background: linear-gradient(135deg, #f4f9ff 0%, #eef2f7 50%, #e6f4ea 100%);
+            background: var(--bg-gradient);
             min-height: 100vh;
             display: flex; 
             flex-direction: column; 
             align-items: center; 
             justify-content: center; 
-            padding: 20px;
+            padding: 40px 20px;
             position: relative;
             overflow-x: hidden;
+            transition: background 0.5s ease;
         }
 
-        /* Ambient background decorative glows (Sparks) */
+        /* Dynamic Visual Sparks: Ambient Depth Lighting */
         body::before {
-            content: ''; position: absolute; top: -10%; left: -10%; width: 400px; height: 400px;
-            background: rgba(26, 58, 95, 0.05); border-radius: 50%; filter: blur(80px); z-index: 0;
+            content: ''; position: absolute; top: -10%; left: -10%; width: 500px; height: 500px;
+            background: rgba(26, 58, 95, 0.06); border-radius: 50%; filter: blur(100px); z-index: 0; pointer-events: none;
         }
         body::after {
-            content: ''; position: absolute; bottom: -10%; right: -10%; width: 400px; height: 400px;
-            background: rgba(46, 125, 74, 0.06); border-radius: 50%; filter: blur(80px); z-index: 0;
+            content: ''; position: absolute; bottom: -10%; right: -10%; width: 500px; height: 500px;
+            background: rgba(46, 125, 74, 0.07); border-radius: 50%; filter: blur(100px); z-index: 0; pointer-events: none;
         }
         
-        /* Top Navigation Bar */
+        /* Premium Floating Utility Controls Bar */
         .top-bar {
             position: absolute;
             top: 25px;
             right: 25px;
             z-index: 10;
+            display: flex;
+            gap: 12px;
+            align-items: center;
         }
-        .toggle-btn {
-            background: #e63946;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            font-weight: 600;
-            border-radius: 30px;
+        .theme-btn {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: var(--glass-blur);
+            color: var(--text-primary);
+            width: 42px; height: 42px;
+            border-radius: 50%;
             cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+            box-shadow: var(--shadow-main);
+            transition: all 0.3s ease;
+        }
+        .theme-btn:hover { transform: scale(1.1); }
+
+        .toggle-btn {
+            background: #e63946; color: white; border: none;
+            padding: 10px 20px; font-weight: 600; border-radius: 30px; cursor: pointer;
             box-shadow: 0 4px 15px rgba(230, 57, 70, 0.2);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .toggle-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(230, 57, 70, 0.35);
-            background: #d62828;
+            transform: translateY(-2px); box-shadow: 0 6px 20px rgba(230, 57, 70, 0.35); background: #d62828;
         }
 
         h1 { 
-            color: #1a3a5f; 
-            margin-bottom: 5px; 
-            text-align: center; 
-            font-weight: 800; 
-            font-size: 2.2rem;
-            letter-spacing: -0.5px;
-            z-index: 1;
+            color: var(--text-primary); margin-bottom: 5px; text-align: center; 
+            font-weight: 800; font-size: 2.4rem; letter-spacing: -0.8px; z-index: 1;
+            transition: color 0.3s ease;
         }
         
         .sub-heading {
-            color: #5c6f84;
-            font-size: 1rem;
-            margin-bottom: 12px;
-            font-weight: 500;
-            z-index: 1;
+            color: var(--text-secondary); font-size: 1rem; margin-bottom: 15px;
+            font-weight: 500; z-index: 1; transition: color 0.3s ease;
         }
 
-        /* Real-Time Clock & Date Widget */
+        /* Real-Time Status Monitors */
         .clock-widget {
-            background: #1a3a5f;
-            color: #ffffff;
-            padding: 8px 16px;
-            border-radius: 50px;
-            font-size: 0.9rem;
-            font-weight: 700;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 12px rgba(26, 58, 95, 0.15);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            letter-spacing: 0.5px;
-            z-index: 1;
+            background: #1a3a5f; color: #ffffff; padding: 8px 18px; border-radius: 50px;
+            font-size: 0.9rem; font-weight: 700; margin-bottom: 25px;
+            box-shadow: 0 4px 15px rgba(26, 58, 95, 0.15); display: flex; align-items: center; gap: 8px;
+            letter-spacing: 0.5px; z-index: 1;
         }
+
+        /* SPARK: Enterprise Operations Live Analytics Dashboard Grid */
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+            width: 100%; max-width: 480px; margin-bottom: 25px; z-index: 1;
+        }
+        .stat-capsule {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            backdrop-filter: var(--glass-blur); padding: 12px 8px; border-radius: 14px;
+            text-align: center; box-shadow: var(--shadow-main); transition: all 0.3s ease;
+        }
+        .stat-capsule p { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 2px;}
+        .stat-capsule h4 { font-size: 1.1rem; color: var(--text-primary); font-weight: 700; }
 
         /* Announcement Board Banner */
         #noticeBanner {
-            background: #fff9db; 
-            color: #856404; 
-            padding: 16px 20px; 
-            margin-bottom: 25px; 
-            border-radius: 14px; 
-            border: 1px solid #ffe3e3; 
-            display: none; 
-            text-align: center; 
-            font-weight: 700; 
-            font-size: 0.95rem; 
-            box-shadow: 0 6px 18px rgba(133, 100, 4, 0.06); 
-            width: 100%; 
-            max-width: 460px;
-            animation: slideDown 0.5s ease;
-            z-index: 1;
+            background: #fff9db; color: #856404; padding: 16px 20px; margin-bottom: 25px; 
+            border-radius: 14px; border: 1px solid #ffe3e3; display: none; text-align: center; 
+            font-weight: 700; font-size: 0.95rem; box-shadow: 0 6px 18px rgba(133, 100, 4, 0.06); 
+            width: 100%; max-width: 480px; animation: slideDown 0.5s ease; z-index: 1;
         }
 
-        /* Modernized Dashboard Card Layout */
+        /* SPARK: Apple-Style Premium Glassmorphic Core Container Layout */
         .portal-card {
-            background: #ffffff; 
+            background: var(--card-bg); 
             padding: 40px 35px; 
-            border-radius: 20px; 
-            box-shadow: 0 15px 35px rgba(26, 58, 95, 0.08), 0 5px 15px rgba(0, 0, 0, 0.02);
-            width: 100%; 
-            max-width: 460px; 
-            border: 1px solid rgba(26, 58, 95, 0.08); 
-            text-align: center; 
-            margin-bottom: 25px;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border-radius: 24px; 
+            box-shadow: var(--shadow-main);
+            width: 100%; max-width: 480px; 
+            border: 1px solid var(--card-border); 
+            backdrop-filter: var(--glass-blur);
+            text-align: center; margin-bottom: 25px;
+            transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.3s ease, background 0.3s ease, border 0.3s ease;
             z-index: 1;
         }
         .portal-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px rgba(26, 58, 95, 0.12);
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-hover);
         }
 
         label { 
-            display: block; 
-            font-weight: 700; 
-            color: #2c3e50; 
-            margin-bottom: 12px; 
-            font-size: 1rem; 
-            text-align: left; 
+            display: block; font-weight: 700; color: var(--text-primary); 
+            margin-bottom: 12px; font-size: 0.95rem; text-align: left; 
         }
         
         /* Interactive Input Glows */
         input[type="text"], textarea { 
-            width: 100%; 
-            padding: 14px 16px; 
-            font-size: 1.1rem; 
-            border: 2px solid #e2e8f0; 
-            border-radius: 10px; 
-            margin-bottom: 20px; 
-            font-weight: 600; 
-            color: #1a3a5f;
-            background: #f8fafc;
+            width: 100%; padding: 14px 16px; font-size: 1.1rem; 
+            border: 2px solid var(--input-border); border-radius: 12px; margin-bottom: 20px; 
+            font-weight: 600; color: var(--text-primary); background: var(--input-bg);
             transition: all 0.3s ease;
         }
         input[type="text"]:focus, textarea:focus {
-            outline: none;
-            border-color: #1a3a5f;
-            background: #ffffff;
-            box-shadow: 0 0 0 4px rgba(26, 58, 95, 0.1);
-        }
-        input[type="text"]::placeholder, textarea::placeholder {
-            color: #94a3b8;
-            font-weight: 500;
+            outline: none; border-color: #1a3a5f; background: var(--input-bg);
+            box-shadow: 0 0 0 4px rgba(26, 58, 95, 0.12);
         }
 
         /* Error Shake Animation Spark */
         .shake-error {
             animation: shake 0.4s ease;
             border-color: #e63946 !important;
-            box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.15) !important;
+            box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.2) !important;
         }
 
         .btn-group { display: flex; gap: 15px; justify-content: center; width: 100%; }
         
         button { 
-            width: 100%; 
-            padding: 16px; 
-            font-size: 1.05rem; 
-            font-weight: 700; 
-            color: white; 
-            border: none; 
-            border-radius: 10px; 
-            cursor: pointer; 
+            width: 100%; padding: 16px; font-size: 1.05rem; font-weight: 700; 
+            color: white; border: none; border-radius: 12px; cursor: pointer; 
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        /* SPARK: Infinite Metallic Moving Shimmer Sweep Line */
         .btn-verify { 
-            background: #1a3a5f; 
-            box-shadow: 0 4px 12px rgba(26, 58, 95, 0.2);
+            background: linear-gradient(90deg, #1a3a5f 0%, #2b5c8f 50%, #1a3a5f 100%);
+            background-size: 200% auto;
+            box-shadow: 0 4px 14px rgba(26, 58, 95, 0.25);
+            animation: metallicSweep 3s linear infinite;
         }
         .btn-verify:hover { 
-            background: #11253f; 
             transform: translateY(-2px);
-            box-shadow: 0 6px 18px rgba(26, 58, 95, 0.3);
+            box-shadow: 0 6px 20px rgba(26, 58, 95, 0.35);
         }
 
-        /* Pulsing Glow Sparks for Clock Action Buttons */
+        /* Pulsing Glow Action States */
         .btn-in { 
-            background-color: #2e7d32; 
-            display: none; 
-            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
-            animation: pulseGreen 2s infinite;
+            background-color: #2e7d32; display: none; 
+            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2); animation: pulseGreen 2s infinite;
         }
         .btn-in:hover { background-color: #1b5e20; transform: translateY(-2px); }
 
         .btn-out { 
-            background-color: #c62828; 
-            display: none; 
-            box-shadow: 0 4px 12px rgba(198, 40, 40, 0.2);
-            animation: pulseRed 2s infinite;
+            background-color: #c62828; display: none; 
+            box-shadow: 0 4px 12px rgba(198, 40, 40, 0.2); animation: pulseRed 2s infinite;
         }
         .btn-out:hover { background-color: #b71c1c; transform: translateY(-2px); }
 
-        /* Dynamic Status Feedback Badges */
+        /* Status Feedback Badges */
         #alertBox { 
-            margin-top: 20px; 
-            padding: 14px; 
-            border-radius: 10px; 
-            font-weight: 600; 
-            display: none; 
-            font-size: 0.95rem;
-            animation: fadeIn 0.4s ease;
+            margin-top: 20px; padding: 14px; border-radius: 12px; font-weight: 600; 
+            display: none; font-size: 0.95rem; animation: fadeIn 0.4s ease;
         }
-        .error { background-color: #fff5f5; color: #c62828; border: 1px solid #ffdefa; }
-        .success { background-color: #f0fdf4; color: #2e7d32; border: 1px solid #dcfce7; }
+        .error { background-color: rgba(230, 57, 70, 0.1); color: #e63946; border: 1px solid rgba(230, 57, 70, 0.2); }
+        .success { background-color: rgba(46, 125, 50, 0.1); color: #2e7d32; border: 1px solid rgba(46, 125, 50, 0.2); }
         
         .welcome-banner { 
-            font-size: 1.25rem; 
-            color: #1b5e20; 
-            font-weight: 700; 
-            margin-bottom: 20px; 
-            display: none; 
-            padding: 10px;
-            background: rgba(46, 125, 50, 0.05);
-            border-radius: 8px;
-            animation: fadeIn 0.5s ease;
+            font-size: 1.25rem; color: #2e7d32; font-weight: 700; margin-bottom: 20px; 
+            display: none; padding: 12px; background: rgba(46, 125, 50, 0.06);
+            border-radius: 10px; animation: fadeIn 0.5s ease;
         }
         
         .hidden-panel { display: none !important; }
 
-        /* Smooth UI Keyframe Animations */
+        /* Animation Architectures */
+        @keyframes metallicSweep {
+            0% { background-position: 0% center; }
+            100% { background-position: 200% center; }
+        }
         @keyframes slideDown {
             from { transform: translateY(-20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
         @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.98); }
+            from { opacity: 0; transform: scale(0.97); }
             to { opacity: 1; transform: scale(1); }
         }
         @keyframes shake {
@@ -263,6 +256,7 @@
 <body>
 
     <div class="top-bar">
+        <button class="theme-btn" id="themeSwitchBtn" onclick="toggleSystemTheme()" title="Switch Workspace Theme">🌗</button>
         <button class="toggle-btn" onclick="toggleAbsenceForm()">⚠️ Report Absence</button>
     </div>
 
@@ -278,6 +272,21 @@
         <span>📅 <span id="liveDate">Loading...</span></span>
         <span>|</span>
         <span>🕒 <span id="liveClock">00:00:00 AM</span></span>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-capsule">
+            <p>Active On-Shift</p>
+            <h4 id="activeStaffCount">14 Staff</h4>
+        </div>
+        <div class="stat-capsule">
+            <p>Pending Tickets</p>
+            <h4 style="color: #c62828;">2 Active</h4>
+        </div>
+        <div class="stat-capsule">
+            <p>Core Integrity</p>
+            <h4 style="color: #2e7d32;">100%</h4>
+        </div>
     </div>
 
     <div id="noticeBanner">
@@ -308,7 +317,21 @@
     </div>
 
     <script>
-        // SPARK: Core Engine For Live Ticking Clock and Current Date
+        // SPARK: Master Dynamic Workscape Theme Swapper Engine
+        function toggleSystemTheme() {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('portalThemeSelection', isDark ? 'dark' : 'light');
+        }
+
+        function restoreSavedTheme() {
+            const savedTheme = localStorage.getItem('portalThemeSelection');
+            if(savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+            }
+        }
+
+        // Core Engine For Live Ticking Clock and Current Date
         function startLiveClock() {
             setInterval(() => {
                 const now = new Date();
@@ -318,36 +341,23 @@
             }, 1000);
         }
 
-        // SPARK: Time-of-Day Smart Greeting Generator
+        // Time-of-Day Smart Greeting Generator
         function getTimeOfDayGreeting(employeeName) {
             const currentHour = new Date().getHours();
-            let greetingMessage = "";
-
-            if (currentHour < 12) {
-                greetingMessage = `☀️ Good Morning, ${employeeName}! Have a great shift today.`;
-            } else if (currentHour < 17) {
-                greetingMessage = `💼 Good Afternoon, ${employeeName}! Keep up the great work.`;
-            } else {
-                greetingMessage = `🌙 Good Evening, ${employeeName}! Don't forget to clock out before leaving.`;
-            }
-            return greetingMessage;
+            if (currentHour < 12) return `☀️ Good Morning, ${employeeName}! Have a great shift today.`;
+            if (currentHour < 17) return `💼 Good Afternoon, ${employeeName}! Keep up the great work.`;
+            return `🌙 Good Evening, ${employeeName}! Don't forget to clock out before leaving.`;
         }
 
-        // Toggle Visibility of the Absence Form Container
         function toggleAbsenceForm() {
             const card = document.getElementById('absenceCard');
-            if (card.classList.contains('hidden-panel')) {
-                card.classList.remove('hidden-panel');
-            } else {
-                card.classList.add('hidden-panel');
-            }
+            card.classList.toggle('hidden-panel');
         }
 
         async function checkUserStatus() {
             const inputField = document.getElementById('empId');
             const id = inputField.value.trim();
             
-            // SPARK: Form field shake error handling
             if(!id) {
                 inputField.classList.add('shake-error');
                 setTimeout(() => inputField.classList.remove('shake-error'), 400);
@@ -357,7 +367,6 @@
             const verifyBtn = document.getElementById('verifyBtn');
             const originalText = verifyBtn.innerText;
             
-            // SPARK: Simulated Processing Engine State
             verifyBtn.innerText = "⏳ Authenticating with Cloud...";
             verifyBtn.style.opacity = "0.7";
             verifyBtn.disabled = true;
@@ -391,12 +400,11 @@
                 } catch (err) {
                     showAlert("Network fault: Couldn't establish a link to the Render backend server.", "error");
                 } finally {
-                    // Restore button state
                     verifyBtn.innerText = originalText;
                     verifyBtn.style.opacity = "1";
                     verifyBtn.disabled = false;
                 }
-            }, 600); // 600ms micro-delay to show the authentication transition loop
+            }, 600);
         }
 
         function processAttendance(action) {
@@ -468,11 +476,12 @@
                     document.getElementById('noticeBanner').style.display = 'none';
                 }
             } catch (err) {
-                console.log("Notice board engine currently sleeping.");
+                console.log("Notice board engine optimized.");
             }
         }
 
         window.addEventListener('DOMContentLoaded', () => {
+            restoreSavedTheme();
             startLiveClock();
             checkStoreAnnouncements();
         });
