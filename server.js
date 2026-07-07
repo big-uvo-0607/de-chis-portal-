@@ -4,6 +4,9 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const mongoose = require('mongoose');
 
+// Variable to store the active store announcement
+let currentStoreNotice = "Welcome to DE Chis Stores Portal!";
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -257,13 +260,20 @@ app.post('/api/absence-report', async (req, res) => {
     }
 });
 
-// 4. Fetch Master Matrix Logs (PROTECTED)
+// 4. Fetch Master Matrix Logs (PROTECTED - UPDATED FOR DIGITAL NOTICE BOARD)
 app.get('/api/admin/data', adminGuard, async (req, res) => {
     try {
         const logs = await AttendanceLog.find({});
         const employeeList = await Employee.find({});
         const absenceReports = await AbsenceReport.find({});
-        res.json({ logs, employeeList, absenceReports });
+        
+        // Added currentNotice payload so the admin dashboard analytics layout can display it cleanly
+        res.json({ 
+            logs, 
+            employeeList, 
+            absenceReports, 
+            currentNotice: currentStoreNotice 
+        });
     } catch (err) {
         res.status(500).json({ success: false, message: "Failed to compile database logs." });
     }
@@ -285,6 +295,17 @@ app.post('/api/admin/register', adminGuard, async (req, res) => {
     } catch (err) {
         res.status(500).json({ success: false, message: "Database writing error." });
     }
+});
+
+// 6. Broadcast New Notice Board Announcement (PROTECTED - NEW FEATURE)
+app.post('/api/admin/notice', adminGuard, (req, res) => {
+    const { notice } = req.body;
+    if (!notice || !notice.trim()) {
+        return res.status(400).json({ success: false, message: "Notice text cannot be empty." });
+    }
+    
+    currentStoreNotice = notice;
+    res.json({ success: true, message: "Announcement broadcasted successfully!" });
 });
 
 app.listen(PORT, () => console.log(`Server running smoothly on port ${PORT}`));

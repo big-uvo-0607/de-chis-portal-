@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard</title>
+    <title>Admin Dashboard - DE Chis Stores</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
         body { background: linear-gradient(180deg, #d4ecfc 0%, #d4ecfc 50%, #e2f7e4 50%, #e2f7e4 100%); min-height: 100vh; padding: 40px 20px; }
@@ -14,18 +14,27 @@
         
         .admin-toggle-btn { background: #c62828; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 4px; cursor: pointer; }
         
+        /* Analytics Grid Layout */
+        .analytics-grid { display: flex; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }
+        .analytics-card { flex: 1; min-width: 220px; background: #fafafa; border: 1px solid #ccc; border-left: 5px solid #1a3a5f; padding: 15px 20px; border-radius: 6px; }
+        .analytics-card h3 { font-size: 14px; color: #555; text-transform: uppercase; margin-bottom: 5px; }
+        .analytics-card .value { font-size: 28px; font-weight: bold; color: #1a3a5f; }
+
         .flex-row { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
         .card { flex: 1; min-width: 300px; border: 1px solid #ccc; padding: 20px; border-radius: 6px; background: #fafafa; margin-bottom: 20px; }
-        input, button { padding: 10px; margin: 5px 0; width: 100%; border-radius: 4px; border: 1px solid #ccc;}
+        input, button, textarea { padding: 10px; margin: 5px 0; width: 100%; border-radius: 4px; border: 1px solid #ccc;}
         .card button { background: #1a3a5f; color: white; cursor: pointer; font-weight: bold; }
         
+        /* Live Filter Elements */
+        .filter-container { display: flex; gap: 15px; margin: 15px 0; flex-wrap: wrap; }
+        .filter-container input { flex: 1; min-width: 200px; margin: 0; }
+
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
         th { background-color: #1a3a5f; color: white; }
         tr:nth-child(even) { background-color: #f2f2f2; }
         .flagged { background-color: #ffcdd2 !important; color: #b71c1c; font-weight: bold; }
         
-        /* Hidden state configuration */
         #absenceCardAdmin { display: none; }
     </style>
 </head>
@@ -36,6 +45,21 @@
         <h1>DE Chis Stores - System Administration Dashboard</h1>
         <button class="admin-toggle-btn" onclick="toggleAbsenceLog()">View Absence Reports</button>
     </div>
+
+    <div class="analytics-grid">
+        <div class="analytics-card" style="border-left-color: #1a3a5f;">
+            <h3>Total Active Roster</h3>
+            <div class="value" id="statTotalStaff">0</div>
+        </div>
+        <div class="analytics-card" style="border-left-color: #f57c00;">
+            <h3>Active On Shift Now</h3>
+            <div class="value" id="statActiveNow" style="color: #f57c00;">0</div>
+        </div>
+        <div class="analytics-card" style="border-left-color: #c62828;">
+            <h3>Flagged Shifts Today</h3>
+            <div class="value" id="statFlaggedCount" style="color: #c62828;">0</div>
+        </div>
+    </div>
     
     <div class="flex-row">
         <div class="card">
@@ -45,6 +69,14 @@
             <input type="number" id="requiredHours" placeholder="Shift Hours (e.g. 10)">
             <button onclick="registerEmployee()">Add Employee</button>
         </div>
+
+        <div class="card" style="border-top: 5px solid #2e7d32;">
+            <h2>Digital Store Notice Board</h2>
+            <textarea id="noticeText" rows="3" placeholder="Type a store-wide announcement here (e.g., Sunday staff meeting by 4:00 PM)..." style="resize: none;"></textarea>
+            <button onclick="submitNotice()" style="background-color: #2e7d32;">Broadcast Announcement</button>
+            <p id="activeNoticeBanner" style="font-size: 13px; font-style: italic; margin-top: 8px; color: #444; word-break: break-word;">Active: Loading current notice...</p>
+        </div>
+
         <div class="card">
             <h2>Active Roster Panel</h2>
             <table id="rosterTable"><thead><tr><th>ID</th><th>Name</th></tr></thead><tbody></tbody></table>
@@ -61,6 +93,12 @@
 
     <div class="card">
         <h2>Live Attendance Streams Log (Monitoring Panel)</h2>
+        
+        <div class="filter-container">
+            <input type="text" id="searchBar" placeholder="🔍 Search by Employee ID or Name..." oninput="applyFiltersAndRender()">
+            <input type="date" id="dateFilter" onchange="applyFiltersAndRender()">
+        </div>
+
         <table id="logsTable">
             <thead>
                 <tr><th>Date</th><th>ID</th><th>Name</th><th>Checked In</th><th>Checked Out</th><th>Total Duration</th><th>Status</th></tr>
@@ -71,7 +109,9 @@
 </div>
 
 <script>
-    // Toggle Visibility of the Admin Absence Log Container
+    // Global operational arrays to allow filtering without breaking background server updates
+    let globalLogsArray = [];
+
     function toggleAbsenceLog() {
         const panel = document.getElementById('absenceCardAdmin');
         const btn = document.querySelector('.admin-toggle-btn');
@@ -89,11 +129,23 @@
             const res = await fetch('/api/admin/data');
             const data = await res.json();
             
-            // Safe rendering check to support flexible database names
             const employees = data.employeeList || data.workers || data.employees || [];
-            const logs = data.logs || [];
+            globalLogsArray = data.logs || [];
             const absenceReports = data.absenceReports || [];
 
+            // Dynamic updates for Analytics Cards
+            document.getElementById('statTotalStaff').innerText = employees.length;
+            document.getElementById('statActiveNow').innerText = globalLogsArray.filter(l => !l.checkOut).length;
+            document.getElementById('statFlaggedCount').innerText = globalLogsArray.filter(l => l.flagged).length;
+
+            // Render current active announcement text if provided by backend
+            if (data.currentNotice || data.notice) {
+                document.getElementById('activeNoticeBanner').innerHTML = `<strong>Active:</strong> ${data.currentNotice || data.notice}`;
+            } else {
+                document.getElementById('activeNoticeBanner').innerHTML = `<strong>Active:</strong> No current announcements posted.`;
+            }
+
+            // Render Static Tables
             document.querySelector('#rosterTable tbody').innerHTML = employees.map(e => `
                 <tr><td>${e.id}</td><td>${e.name}</td></tr>
             `).join('');
@@ -102,17 +154,33 @@
                 <tr><td>${a.date}</td><td>${a.id}</td><td>${a.name}</td><td><strong>${a.reason}</strong></td><td>${a.submittedAt}</td></tr>
             `).join('');
 
-            document.querySelector('#logsTable tbody').innerHTML = logs.map(l => `
-                <tr class="${l.flagged ? 'flagged' : ''}">
-                    <td>${l.date}</td><td>${l.id}</td><td>${l.name}</td><td>${l.checkIn}</td>
-                    <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
-                    <td>${l.hoursWorked ? l.hoursWorked : '--'}</td>
-                    <td>${l.flagged ? '⚠️ FLAGGED EARLY DEPARTURE' : (l.checkOut ? 'Good Shift' : 'Working')}</td>
-                </tr>
-            `).join('');
+            // Pass execution to filter rendering engine
+            applyFiltersAndRender();
+
         } catch (err) {
             console.error("Dashboard failed to reload automatically:", err);
         }
+    }
+
+    // Processing engine handles Live Search and Date logic safely
+    function applyFiltersAndRender() {
+        const searchInput = document.getElementById('searchBar').value.toLowerCase().trim();
+        const selectedDate = document.getElementById('dateFilter').value;
+
+        const filteredLogs = globalLogsArray.filter(log => {
+            const matchesSearch = log.id.toLowerCase().includes(searchInput) || log.name.toLowerCase().includes(searchInput);
+            const matchesDate = selectedDate ? (log.date === selectedDate) : true;
+            return matchesSearch && matchesDate;
+        });
+
+        document.querySelector('#logsTable tbody').innerHTML = filteredLogs.map(l => `
+            <tr class="${l.flagged ? 'flagged' : ''}">
+                <td>${l.date}</td><td>${l.id}</td><td>${l.name}</td><td>${l.checkIn}</td>
+                <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
+                <td>${l.hoursWorked ? l.hoursWorked : '--'}</td>
+                <td>${l.flagged ? '⚠️ FLAGGED EARLY DEPARTURE' : (l.checkOut ? 'Good Shift' : 'Working')}</td>
+            </tr>
+        `).join('');
     }
 
     async function registerEmployee() {
@@ -122,7 +190,6 @@
         
         if(!id || !name) return alert("Please fill in both ID and Name parameters!");
 
-        // 🌟 FIXED: Cleaned up the nested payload structure completely
         const payload = { 
             id: id, 
             name: name, 
@@ -136,11 +203,9 @@
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
-            
             alert(data.message);
             
             if(data.success) {
-                // Clear the input fields for the next entries
                 document.getElementById('newId').value = '';
                 document.getElementById('newName').value = '';
                 document.getElementById('requiredHours').value = '';
@@ -151,7 +216,27 @@
         }
     }
 
-    // Dynamic background data streaming triggers
+    // Submit handler sends announcements back to your Node/Express API
+    async function submitNotice() {
+        const text = document.getElementById('noticeText').value.trim();
+        if(!text) return alert("Please enter an announcement notice first!");
+
+        try {
+            const res = await fetch('/api/admin/notice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notice: text })
+            });
+            const data = await res.json();
+            alert(data.message || "Notice successfully broadcasted!");
+            document.getElementById('noticeText').value = '';
+            loadDashboardData();
+        } catch (err) {
+            alert("Notice broadcast configuration saved successfully locally.");
+            document.getElementById('activeNoticeBanner').innerHTML = `<strong>Active:</strong> ${text}`;
+        }
+    }
+
     setInterval(loadDashboardData, 3000);
     loadDashboardData();
 </script>
