@@ -5,97 +5,327 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DE Chis Stores Portal</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-        body {
-            background: linear-gradient(180deg, #d4ecfc 0%, #d4ecfc 50%, #e2f7e4 50%, #e2f7e4 100%);
-            min-height: 100vh;
-            display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;
-            position: relative;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* Top Navigation Bar for Menu Actions */
-        .top-bar {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-        }
-        .toggle-btn {
-            background: #c62828;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            font-weight: bold;
-            border-radius: 20px;
-            cursor: pointer;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        body {
+            background: linear-gradient(135deg, #f4f9ff 0%, #eef2f7 50%, #e6f4ea 100%);
+            min-height: 100vh;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            padding: 20px;
+            position: relative;
+            overflow-x: hidden;
         }
 
-        h1 { color: #1a3a5f; margin-bottom: 25px; text-align: center; }
+        /* Ambient background decorative glows (Sparks) */
+        body::before {
+            content: ''; position: absolute; top: -10%; left: -10%; width: 400px; height: 400px;
+            background: rgba(26, 58, 95, 0.05); border-radius: 50%; filter: blur(80px); z-index: 0;
+        }
+        body::after {
+            content: ''; position: absolute; bottom: -10%; right: -10%; width: 400px; height: 400px;
+            background: rgba(46, 125, 74, 0.06); border-radius: 50%; filter: blur(80px); z-index: 0;
+        }
+        
+        /* Top Navigation Bar */
+        .top-bar {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            z-index: 10;
+        }
+        .toggle-btn {
+            background: #e63946;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-weight: 600;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(230, 57, 70, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .toggle-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(230, 57, 70, 0.35);
+            background: #d62828;
+        }
+
+        h1 { 
+            color: #1a3a5f; 
+            margin-bottom: 5px; 
+            text-align: center; 
+            font-weight: 800; 
+            font-size: 2.2rem;
+            letter-spacing: -0.5px;
+            z-index: 1;
+        }
+        
+        .sub-heading {
+            color: #5c6f84;
+            font-size: 1rem;
+            margin-bottom: 30px;
+            font-weight: 500;
+            z-index: 1;
+        }
+
+        /* Real-Time Clock & Date Widget */
+        .clock-widget {
+            background: #1a3a5f;
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(26, 58, 95, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        /* Announcement Board Banner */
+        #noticeBanner {
+            background: #fff9db; 
+            color: #856404; 
+            padding: 16px 20px; 
+            margin-bottom: 25px; 
+            border-radius: 14px; 
+            border: 1px solid #ffe3e3; 
+            display: none; 
+            text-align: center; 
+            font-weight: 700; 
+            font-size: 0.95rem; 
+            box-shadow: 0 6px 18px rgba(133, 100, 4, 0.06); 
+            width: 100%; 
+            max-width: 460px;
+            animation: slideDown 0.5s ease;
+            z-index: 1;
+        }
+
+        /* Modernized Dashboard Card Layout */
         .portal-card {
-            background: #ffffff; padding: 35px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-            width: 100%; max-width: 450px; border: 3px solid #1a3a5f; text-align: center; margin-bottom: 20px;
+            background: #ffffff; 
+            padding: 40px 35px; 
+            border-radius: 20px; 
+            box-shadow: 0 15px 35px rgba(26, 58, 95, 0.08), 0 5px 15px rgba(0, 0, 0, 0.02);
+            width: 100%; 
+            max-width: 460px; 
+            border: 1px solid rgba(26, 58, 95, 0.08); 
+            text-align: center; 
+            margin-bottom: 25px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            z-index: 1;
+        }
+        .portal-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(26, 58, 95, 0.12);
+        }
+
+        label { 
+            display: block; 
+            font-weight: 700; 
+            color: #2c3e50; 
+            margin-bottom: 12px; 
+            font-size: 1rem; 
+            text-align: left; 
+        }
+        
+        /* Interactive Input Glows */
+        input[type="text"], textarea { 
+            width: 100%; 
+            padding: 14px 16px; 
+            font-size: 1.1rem; 
+            border: 2px solid #e2e8f0; 
+            border-radius: 10px; 
+            margin-bottom: 20px; 
+            font-weight: 600; 
+            color: #1a3a5f;
+            background: #f8fafc;
             transition: all 0.3s ease;
         }
-        label { display: block; font-weight: bold; color: #333; margin-bottom: 10px; font-size: 1.1rem; text-align: left; }
-        input[type="text"], textarea { width: 100%; padding: 12px; font-size: 1.1rem; border: 2px solid #1a3a5f; border-radius: 6px; margin-bottom: 15px; font-weight: bold; }
-        .btn-group { display: flex; gap: 15px; justify-content: center; }
-        button { width: 100%; padding: 15px; font-size: 1.1rem; font-weight: bold; color: white; border: none; border-radius: 6px; cursor: pointer; }
-        .btn-in { background-color: #2e7d32; display: none; }
-        .btn-out { background-color: #c62828; display: none; }
-        .btn-verify { background-color: #1a3a5f; }
-        #alertBox { margin-top: 15px; padding: 12px; border-radius: 6px; font-weight: bold; display: none; }
-        .error { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
-        .success { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
-        .welcome-banner { font-size: 1.3rem; color: #2e7d32; font-weight: bold; margin-bottom: 15px; display: none; }
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #1a3a5f;
+            background: #ffffff;
+            box-shadow: 0 0 0 4px rgba(26, 58, 95, 0.1);
+        }
+        input[type="text"]::placeholder, textarea::placeholder {
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        .btn-group { display: flex; gap: 15px; justify-content: center; width: 100%; }
         
-        /* Hidden layout container state */
-        .hidden-panel { display: none; }
+        button { 
+            width: 100%; 
+            padding: 16px; 
+            font-size: 1.05rem; 
+            font-weight: 700; 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            cursor: pointer; 
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-verify { 
+            background: #1a3a5f; 
+            box-shadow: 0 4px 12px rgba(26, 58, 95, 0.2);
+        }
+        .btn-verify:hover { 
+            background: #11253f; 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(26, 58, 95, 0.3);
+        }
+
+        /* Pulsing Glow Sparks for Clock Action Buttons */
+        .btn-in { 
+            background-color: #2e7d32; 
+            display: none; 
+            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
+            animation: pulseGreen 2s infinite;
+        }
+        .btn-in:hover { background-color: #1b5e20; transform: translateY(-2px); }
+
+        .btn-out { 
+            background-color: #c62828; 
+            display: none; 
+            box-shadow: 0 4px 12px rgba(198, 40, 40, 0.2);
+            animation: pulseRed 2s infinite;
+        }
+        .btn-out:hover { background-color: #b71c1c; transform: translateY(-2px); }
+
+        /* Dynamic Status Feedback Badges */
+        #alertBox { 
+            margin-top: 20px; 
+            padding: 14px; 
+            border-radius: 10px; 
+            font-weight: 600; 
+            display: none; 
+            font-size: 0.95rem;
+            animation: fadeIn 0.4s ease;
+        }
+        .error { background-color: #fff5f5; color: #c62828; border: 1px solid #ffdefa; }
+        .success { background-color: #f0fdf4; color: #2e7d32; border: 1px solid #dcfce7; }
+        
+        .welcome-banner { 
+            font-size: 1.25rem; 
+            color: #1b5e20; 
+            font-weight: 700; 
+            margin-bottom: 20px; 
+            display: none; 
+            padding: 10px;
+            background: rgba(46, 125, 50, 0.05);
+            border-radius: 8px;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .hidden-panel { display: none !important; }
+
+        /* Smooth UI Keyframe Animations */
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes pulseGreen {
+            0% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(46, 125, 50, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0); }
+        }
+        @keyframes pulseRed {
+            0% { box-shadow: 0 0 0 0 rgba(198, 40, 40, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(198, 40, 40, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(198, 40, 40, 0); }
+        }
     </style>
 </head>
 <body>
 
     <div class="top-bar">
-        <button class="toggle-btn" onclick="toggleAbsenceForm()">Report Absence</button>
+        <button class="toggle-btn" onclick="toggleAbsenceForm()">⚠️ Report Absence</button>
     </div>
 
-    <h1>Welcome To DE Chis Stores Check IN portal</h1>
+    <h1>DE Chis Stores Portal</h1>
+    <div class="sub-heading">Employee Digital Access Station</div>
 
-    <!-- FEATURE: LIVE INTERACTIVE ANNOUNCEMENT BANNER -->
-    <div id="noticeBanner" style="background: #fff3cd; color: #856404; padding: 15px; margin-bottom: 20px; border-radius: 6px; border: 1px solid #ffeeba; display: none; text-align: center; font-weight: bold; font-size: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); width: 100%; max-width: 450px;">
-        📢 STORE NOTICE: <span id="noticeContent" style="font-weight: normal; margin-left: 5px;">Loading announcements...</span>
+    <div class="clock-widget">
+        <span>📅 <span id="liveDate">Loading...</span></span>
+        <span>|</span>
+        <span>🕒 <span id="liveClock">00:00:00 AM</span></span>
+    </div>
+
+    <div id="noticeBanner">
+        📢 STORE NOTICE: <span id="noticeContent" style="font-weight: 500; margin-left: 5px;">Loading announcements...</span>
     </div>
 
     <div class="portal-card">
-        <label for="empId">Enter Employee ID:</label>
+        <label for="empId">Verify Assignment ID</label>
         <input type="text" id="empId" placeholder="e.g. EMP001">
         
-        <button id="verifyBtn" class="btn-verify" onclick="checkUserStatus()">Verify My Profile</button>
+        <button id="verifyBtn" class="btn-verify" onclick="checkUserStatus()">Verify Profile</button>
         
         <div id="welcomeMessage" class="welcome-banner"></div>
 
         <div class="btn-group">
-            <button id="checkInBtn" class="btn-in" onclick="processAttendance('checkin')">Check In</button>
-            <button id="checkOutBtn" class="btn-out" onclick="processAttendance('checkout')">Check Out</button>
+            <button id="checkInBtn" class="btn-in" onclick="processAttendance('checkin')">Clock In Shift</button>
+            <button id="checkOutBtn" class="btn-out" onclick="processAttendance('checkout')">Clock Out Shift</button>
         </div>
         <div id="alertBox"></div>
     </div>
 
-    <div id="absenceCard" class="portal-card hidden-panel" style="border-color: #c62828;">
-        <h3 style="color:#c62828; margin-bottom: 15px;">Report Absence</h3>
+    <div id="absenceCard" class="portal-card hidden-panel" style="border-top: 4px solid #c62828; animation: slideDown 0.4s ease;">
+        <h3 style="color:#c62828; margin-bottom: 15px; font-weight: 700;">File Official Absence Ticket</h3>
         <input type="text" id="absentEmpId" placeholder="Your Employee ID">
-        <textarea id="absenceReason" rows="3" placeholder="State why you are absent today..."></textarea>
-        <button style="background:#c62828;" onclick="submitAbsence()">Submit Absence Ticket</button>
-        <div id="absenceAlert" style="margin-top:10px; display:none; padding:10px; border-radius:6px; font-weight:bold;"></div>
+        <textarea id="absenceReason" rows="3" placeholder="Provide details regarding your absence request..."></textarea>
+        <button style="background:#c62828; box-shadow: 0 4px 12px rgba(198,40,40,0.2);" onclick="submitAbsence()">Submit Absence Ticket</button>
+        <div id="absenceAlert" style="margin-top:15px; display:none; padding:12px; border-radius:10px; font-weight:600;"></div>
     </div>
 
     <script>
+        // SPARK 2: Core Engine For Live Ticking Clock and Current Date
+        function startLiveClock() {
+            setInterval(() => {
+                const now = new Date();
+                
+                // Format Time beautifully
+                document.getElementById('liveClock').innerText = now.toLocaleTimeString();
+                
+                // Format Date clean and clear
+                const options = { weekday: 'short', month: 'short', day: 'numeric' };
+                document.getElementById('liveDate').innerText = now.toLocaleDateString('en-US', options);
+            }, 1000);
+        }
+
+        // SPARK 3: Time-of-Day Smart Greeting Generator
+        function getTimeOfDayGreeting(employeeName) {
+            const currentHour = new Date().getHours();
+            let greetingMessage = "";
+
+            if (currentHour < 12) {
+                greetingMessage = `☀️ Good Morning, ${employeeName}! Have a great shift today.`;
+            } else if (currentHour < 17) {
+                greetingMessage = `💼 Good Afternoon, ${employeeName}! Keep up the great work.`;
+            } else {
+                greetingMessage = `🌙 Good Evening, ${employeeName}! Don't forget to clock out before leaving.`;
+            }
+            return greetingMessage;
+        }
+
         // Toggle Visibility of the Absence Form Container
         function toggleAbsenceForm() {
             const card = document.getElementById('absenceCard');
-            if (card.style.display === "block") {
-                card.style.display = "none";
+            if (card.classList.contains('hidden-panel')) {
+                card.classList.remove('hidden-panel');
             } else {
-                card.style.display = "block";
+                card.classList.add('hidden-panel');
             }
         }
 
@@ -115,17 +345,18 @@
             welcomeMessage.style.display = "none";
 
             if (data.status === "unregistered") {
-                showAlert("Access Denied: ID not registered.", "error");
+                showAlert("Access Denied: ID not registered inside store database.", "error");
             } else if (data.status === "not_checked_in") {
                 checkInBtn.style.display = "block";
-                showAlert("Profile verified. Ready to check in.", "success");
+                showAlert("Profile authenticated successfully. Ready to record session.", "success");
             } else if (data.status === "checked_in") {
-                welcomeMessage.innerText = `Welcome back, ${data.name}!`;
+                // Applied Spark 3 Here
+                welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
                 welcomeMessage.style.display = "block";
                 checkOutBtn.style.display = "block";
-                showAlert(`You checked in at ${data.checkInTime}.`, "success");
+                showAlert(`Active shift log started at ${data.checkInTime}.`, "success");
             } else if (data.status === "completed") {
-                showAlert("You have already completed your actions for today.", "success");
+                showAlert("Shift workflow completely finished for today. Thank you!", "success");
             }
         }
 
@@ -134,10 +365,10 @@
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (pos) => sendAttendance(employeeId, action, pos.coords.latitude, pos.coords.longitude),
-                    () => showAlert("Location access required.", "error")
+                    () => showAlert("Location access required to confirm presence.", "error")
                 );
             } else {
-                showAlert("Geolocation unsupported.", "error");
+                showAlert("Your browser doesn't support distance validation.", "error");
             }
         }
 
@@ -177,7 +408,7 @@
             if(data.success) {
                 document.getElementById('absentEmpId').value = "";
                 document.getElementById('absenceReason').value = "";
-                setTimeout(() => { toggleAbsenceForm(); }, 1500); // Auto close after 1.5 seconds
+                setTimeout(() => { toggleAbsenceForm(); }, 1800);
             }
         }
 
@@ -186,13 +417,11 @@
             box.innerText = msg; box.className = type; box.style.display = "block";
         }
 
-        // FEATURE ENGINE: Automatically fetch and display active notices for workers
         async function checkStoreAnnouncements() {
             try {
                 const res = await fetch('/api/notice');
                 const data = await res.json();
                 
-                // Only show the banner if there is an active notice that isn't the default message
                 if (data.notice && data.notice !== "Welcome to DE Chis Stores Portal!") {
                     document.getElementById('noticeContent').innerText = data.notice;
                     document.getElementById('noticeBanner').style.display = 'block';
@@ -204,8 +433,11 @@
             }
         }
 
-        // Trigger notice check when the browser finishes loading the screen structure
-        window.addEventListener('DOMContentLoaded', checkStoreAnnouncements);
+        // Initialize all active custom features on DOM load
+        window.addEventListener('DOMContentLoaded', () => {
+            startLiveClock();
+            checkStoreAnnouncements();
+        });
     </script>
 </body>
 </html>
