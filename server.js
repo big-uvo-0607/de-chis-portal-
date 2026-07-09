@@ -10,20 +10,18 @@ const PORT = process.env.PORT || 5000;
 // Universal Middleware Layout
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname)); // ⭐ ADDED: Tells the server to host your HTML/CSS files from this folder
+app.use(express.static(__dirname)); 
 
 // ==========================================
 // MONGODB ATLAS SCHEMAS & CONFIGURATIONS
 // ==========================================
 
-// 1. Employee Master Directory Schema
 const employeeSchema = new mongoose.Schema({
     employeeId: { type: String, required: true, unique: true },
     name: { type: String, required: true },
-    shiftHours: { type: Number, default: 10 } // Dynamic shift registration attribute
+    shiftHours: { type: Number, default: 10 } 
 });
 
-// 2. Real-Time Shift Activity Ledger Schema
 const attendanceSchema = new mongoose.Schema({
     employeeId: { type: String, required: true },
     checkInTime: { type: Date, required: true },
@@ -32,14 +30,12 @@ const attendanceSchema = new mongoose.Schema({
     longitude: { type: Number, required: true }
 });
 
-// 3. Official Staff Absence Ticket Ledger Schema
 const absenceSchema = new mongoose.Schema({
     employeeId: { type: String, required: true },
     reason: { type: String, required: true },
     filedAt: { type: Date, default: Date.now }
 });
 
-// 4. Centralized System Bulletin Broadcast Schema
 const noticeSchema = new mongoose.Schema({
     notice: { type: String, default: "Welcome to DE Chis Stores Portal!" }
 });
@@ -49,7 +45,6 @@ const Attendance = mongoose.model('Attendance', attendanceSchema);
 const Absence = mongoose.model('Absence', absenceSchema);
 const Notice = mongoose.model('Notice', noticeSchema);
 
-// Establish Live Pipeline Link with MongoDB Cloud
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/de_chis_stores')
     .then(() => console.log('🚀 Connected to DE CHIS STORES Live MongoDB Production Cluster'))
     .catch(err => console.error('❌ Connection Failure in MongoDB Engine:', err));
@@ -59,7 +54,6 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/de_chis_sto
 // PORTAL API OPERATIONAL ENDPOINTS
 // ==========================================
 
-// 1. Live Tracker: Count Active On-Shift Personnel
 app.get('/api/attendance/active-count', async (req, res) => {
     try {
         const activeCount = await Attendance.countDocuments({ checkOutTime: null });
@@ -69,33 +63,25 @@ app.get('/api/attendance/active-count', async (req, res) => {
     }
 });
 
-// 2. Identity Verification & Current Active Work State Endpoint
 app.get('/api/attendance/status/:id', async (req, res) => {
     try {
         const id = req.params.id;
-        
-        // Audit presence inside the primary enterprise registry
         const employee = await Employee.findOne({ employeeId: id });
         if (!employee) {
             return res.json({ status: "unregistered" });
         }
 
-        // Trace active punch card configurations within the ledger
         const activeShift = await Attendance.findOne({ employeeId: id, checkOutTime: null });
-        
         if (activeShift) {
             return res.json({
                 status: "checked_in",
                 name: employee.name,
                 checkInTime: new Date(activeShift.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                
-                // SPARK: High-Precision Calculation Elements Passed to Frontend
                 checkInTimeRaw: activeShift.checkInTime, 
                 shiftHours: employee.shiftHours || 10   
             });
         }
 
-        // Audit if employee has completed an active cycle today
         const startOfToday = new Date();
         startOfToday.setHours(0,0,0,0);
         
@@ -109,15 +95,12 @@ app.get('/api/attendance/status/:id', async (req, res) => {
             return res.json({ status: "completed" });
         }
 
-        // Fallback standard entry profile state configuration
         return res.json({ status: "not_checked_in" });
-
     } catch (err) {
         res.status(500).json({ error: "Internal core verification system fault." });
     }
 });
 
-// 3. Process Attendance Check-In / Check-Out Actions
 app.post('/api/attendance', async (req, res) => {
     try {
         const { employeeId, action, lat, lon } = req.body;
@@ -150,11 +133,9 @@ app.post('/api/attendance', async (req, res) => {
     }
 });
 
-// 4. File Official Employee Absence Ticket
 app.post('/api/absence-report', async (req, res) => {
     try {
         const { employeeId, reason } = req.body;
-        
         const employee = await Employee.findOne({ employeeId });
         if (!employee) {
             return res.json({ success: false, message: "Ticket Denied: Assignment ID not recognized." });
@@ -162,34 +143,28 @@ app.post('/api/absence-report', async (req, res) => {
 
         const newTicket = new Absence({ employeeId, reason });
         await newTicket.save();
-        
         res.json({ success: true, message: "Absence Ticket routed smoothly to store administrative office." });
     } catch (err) {
         res.status(500).json({ success: false, message: "Database transmission delay. Try again." });
     }
 });
 
-// 5. System Administrator Suite: Terminate & Delete Profile Record
 app.delete('/api/employees/:employeeId', async (req, res) => {
     try {
         const id = req.params.employeeId;
         const targetProfile = await Employee.findOne({ employeeId: id });
-        
         if (!targetProfile) {
             return res.json({ success: false, message: "Operation Aborted: Profile ID not located inside directory." });
         }
 
         await Employee.deleteOne({ employeeId: id });
-        // Clean up pending workflows associated with the target user profile
         await Attendance.deleteMany({ employeeId: id, checkOutTime: null });
-
         res.json({ success: true, message: `Profile execution complete: ${id} scrubbed from cloud server environment.` });
     } catch (err) {
         res.status(500).json({ success: false, message: "Administrative override terminal network failure." });
     }
 });
 
-// 6. Centralized System Bulletin Broadcast Feed Retriever
 app.get('/api/notice', async (req, res) => {
     try {
         let currentNotice = await Notice.findOne();
@@ -203,12 +178,11 @@ app.get('/api/notice', async (req, res) => {
     }
 });
 
-// 7. Catch-All Routing Interface Delivery
+// Catch-All Routing Interface Delivery (Fully compatible with Express 4)
 app.get('*', (req, res) => {
-    res.sendFile(__dirname + '/index.html'); // ⭐ ADDED: Automatically delivers your portal UI to anyone opening your Render URL
+    res.sendFile(__dirname + '/index.html'); 
 });
 
-// Initialize System Engine Server Listening Mode
 app.listen(PORT, () => {
     console.log(`📡 DE CHIS Operational Grid Core broadcast active on port: ${PORT}`);
 });
