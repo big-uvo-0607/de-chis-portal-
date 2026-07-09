@@ -208,7 +208,7 @@
         .btn-out:hover { background-color: #b71c1c; transform: translateY(-2px); }
 
         /* Status Feedback Badges */
-        #alertBox { 
+        #alertBox, #adminAlert { 
             margin-top: 20px; padding: 14px; border-radius: 12px; font-weight: 600; 
             display: none; font-size: 0.95rem; animation: fadeIn 0.4s ease;
         }
@@ -255,8 +255,8 @@
 </head>
 <body>
 
-    <!-- Utility Interface Row -->
     <div class="top-bar">
+        <button class="theme-btn" onclick="toggleAdminPanel()" title="Open System Admin Tools">🛠️</button>
         <button class="theme-btn" id="themeSwitchBtn" onclick="toggleSystemTheme()" title="Switch Workspace Theme">🌗</button>
         <button class="toggle-btn" onclick="toggleAbsenceForm()">⚠️ Report Absence</button>
     </div>
@@ -264,20 +264,17 @@
     <h1>DE Chis Stores Portal</h1>
     <div class="sub-heading">Employee Digital Access Station</div>
 
-    <!-- System Connection Badge -->
     <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(46, 125, 50, 0.08); color: #2e7d32; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; margin-bottom: 20px; z-index: 1;">
         <span style="width: 8px; height: 8px; background-color: #2e7d32; border-radius: 50%; display: inline-block; animation: pulseGreen 1.5s infinite;"></span>
         Secure Cloud Database Connected
     </div>
 
-    <!-- Live Interactive Clock Widget -->
     <div class="clock-widget">
         <span>📅 <span id="liveDate">Loading...</span></span>
         <span>|</span>
         <span>🕒 <span id="liveClock">00:00:00 AM</span></span>
     </div>
 
-    <!-- Live Business Analytics Operational Board Capsule Grid -->
     <div class="stats-grid">
         <div class="stat-capsule">
             <p>Active On-Shift</p>
@@ -293,12 +290,10 @@
         </div>
     </div>
 
-    <!-- Announcement Board Banner -->
     <div id="noticeBanner">
         📢 STORE NOTICE: <span id="noticeContent" style="font-weight: 500; margin-left: 5px;">Loading announcements...</span>
     </div>
 
-    <!-- Main Work Verification Card -->
     <div class="portal-card">
         <label for="empId">Verify Assignment ID</label>
         <input type="text" id="empId" placeholder="e.g. EMP001">
@@ -307,6 +302,12 @@
         
         <div id="welcomeMessage" class="welcome-banner"></div>
 
+        <div id="shiftTrackerBox" style="display: none; margin: 25px 0 15px 0; padding: 20px; background: rgba(26, 58, 95, 0.04); border-radius: 16px; border: 1px dashed var(--card-border); text-align: center;">
+            <p style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 700; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Time Elapsed On Shift</p>
+            <div id="shiftTimerDisplay" style="font-size: 32px; font-weight: 800; color: #1a3a5f; font-family: 'Courier New', Courier, monospace; letter-spacing: 1px; margin-bottom: 12px;">00:00:00</div>
+            <div id="shiftRequirementNote" style="font-size: 0.9rem; color: #c62828; font-weight: 700; background: rgba(198, 40, 40, 0.06); padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(198, 40, 40, 0.1); display: inline-block;"></div>
+        </div>
+
         <div class="btn-group">
             <button id="checkInBtn" class="btn-in" onclick="processAttendance('checkin')">Clock In Shift</button>
             <button id="checkOutBtn" class="btn-out" onclick="processAttendance('checkout')">Clock Out Shift</button>
@@ -314,7 +315,6 @@
         <div id="alertBox"></div>
     </div>
 
-    <!-- Absence Form Card -->
     <div id="absenceCard" class="portal-card hidden-panel" style="border-top: 4px solid #c62828; animation: slideDown 0.4s ease;">
         <h3 style="color:#c62828; margin-bottom: 15px; font-weight: 700;">File Official Absence Ticket</h3>
         <input type="text" id="absentEmpId" placeholder="Your Employee ID">
@@ -323,7 +323,22 @@
         <div id="absenceAlert" style="margin-top:15px; display:none; padding:12px; border-radius:10px; font-weight:600;"></div>
     </div>
 
+    <div id="adminCard" class="portal-card hidden-panel" style="border-top: 4px solid #e63946; animation: slideDown 0.4s ease;">
+        <h3 style="color: var(--text-primary); margin-bottom: 5px; font-weight: 800;">System Administrator Suite</h3>
+        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 20px; font-weight: 500;">Direct Database Deletion Engine</p>
+        
+        <label for="deleteEmpId">Target Profile Assignment ID</label>
+        <input type="text" id="deleteEmpId" placeholder="e.g. EMP004" style="border-color: rgba(230, 57, 70, 0.3);">
+        
+        <button style="background: #e63946; box-shadow: 0 4px 14px rgba(230, 57, 70, 0.25);" onclick="deleteEmployeeProfile()">
+            💥 Terminate & Delete Profile Record
+        </button>
+        <div id="adminAlert"></div>
+    </div>
+
     <script>
+        let workTimerInterval = null; // Global reference for tracking operational workshift counter loop
+
         // Master Dynamic Workscape Theme Swapper Engine
         function toggleSystemTheme() {
             document.body.classList.toggle('dark-theme');
@@ -348,7 +363,7 @@
             }, 1000);
         }
 
-        // SPARK: Integrated Dynamic Staff Count Database Poller
+        // Integrated Dynamic Staff Count Database Poller
         async function updateActiveStaffCount() {
             try {
                 const res = await fetch('/api/attendance/active-count');
@@ -371,6 +386,96 @@
         function toggleAbsenceForm() {
             const card = document.getElementById('absenceCard');
             card.classList.toggle('hidden-panel');
+            document.getElementById('adminCard').classList.add('hidden-panel');
+        }
+
+        // Secured Admin Panel Gatekeeper Engine with PIN code validation
+        function toggleAdminPanel() {
+            const card = document.getElementById('adminCard');
+            
+            if (!card.classList.contains('hidden-panel')) {
+                card.classList.add('hidden-panel');
+                return;
+            }
+            
+            const accessPin = prompt("⚠️ Security Alert: Enter Admin System PIN to unlock control panel:");
+            
+            if (accessPin === "2026") { 
+                showAlert("Admin Access Granted.", "success");
+                card.classList.remove('hidden-panel');
+                document.getElementById('absenceCard').classList.add('hidden-panel');
+            } else if (accessPin !== null) {
+                alert("🔒 Access Denied: Unauthorized Personnel Attempt Tracked.");
+            }
+        }
+
+        // Frontend Engine to communicate with backend DELETE endpoint
+        async function deleteEmployeeProfile() {
+            const inputField = document.getElementById('deleteEmpId');
+            const id = inputField.value.trim();
+            const alertBox = document.getElementById('adminAlert');
+            
+            if(!id) {
+                inputField.classList.add('shake-error');
+                setTimeout(() => inputField.classList.remove('shake-error'), 400);
+                return;
+            }
+
+            if(!confirm(`Are you absolutely sure you want to permanently erase ${id} from DE Chis Stores? This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                
+                alertBox.innerText = data.message;
+                alertBox.style.display = "block";
+                
+                if(data.success) {
+                    alertBox.className = "success";
+                    inputField.value = "";
+                    updateActiveStaffCount();
+                } else {
+                    alertBox.className = "error";
+                }
+            } catch (err) {
+                alertBox.innerText = "Error: Backend endpoint /api/employees/:employeeId is missing or unreachable.";
+                alertBox.className = "error";
+                alertBox.style.display = "block";
+            }
+        }
+
+        // High-Precision Shift Tracking Clock Engine (32px Display Loop)
+        function startWorkTimer(checkInTimeISO, shiftHours) {
+            if (workTimerInterval) clearInterval(workTimerInterval);
+            
+            const checkInDate = new Date(checkInTimeISO);
+            const timerDisplay = document.getElementById('shiftTimerDisplay');
+            const noteDisplay = document.getElementById('shiftRequirementNote');
+            const trackerBox = document.getElementById('shiftTrackerBox');
+            
+            noteDisplay.innerText = `⚠️ Shift Rule: You must complete your ${shiftHours}-hour shift before leaving.`;
+            trackerBox.style.display = "block";
+            
+            workTimerInterval = setInterval(() => {
+                const now = new Date();
+                const differenceInMs = now - checkInDate;
+                
+                if (differenceInMs < 0) return;
+                
+                const totalSeconds = Math.floor(differenceInMs / 1000);
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                
+                const formattedDisplay = 
+                    String(hours).padStart(2, '0') + ":" + 
+                    String(minutes).padStart(2, '0') + ":" + 
+                    String(seconds).padStart(2, '0');
+                    
+                timerDisplay.innerText = formattedDisplay;
+            }, 1000);
         }
 
         async function checkUserStatus() {
@@ -398,6 +503,7 @@
                     const checkInBtn = document.getElementById('checkInBtn');
                     const checkOutBtn = document.getElementById('checkOutBtn');
                     const welcomeMessage = document.getElementById('welcomeMessage');
+                    const trackerBox = document.getElementById('shiftTrackerBox');
 
                     checkInBtn.style.display = "none";
                     checkOutBtn.style.display = "none";
@@ -405,16 +511,25 @@
 
                     if (data.status === "unregistered") {
                         showAlert("Access Denied: ID not registered inside store database.", "error");
+                        trackerBox.style.display = "none";
+                        if (workTimerInterval) clearInterval(workTimerInterval);
                     } else if (data.status === "not_checked_in") {
                         checkInBtn.style.display = "block";
                         showAlert("Profile authenticated successfully. Ready to record session.", "success");
+                        trackerBox.style.display = "none";
+                        if (workTimerInterval) clearInterval(workTimerInterval);
                     } else if (data.status === "checked_in") {
                         welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
                         welcomeMessage.style.display = "block";
                         checkOutBtn.style.display = "block";
                         showAlert(`Active shift log started at ${data.checkInTime}.`, "success");
+                        
+                        // Fire up high-precision 32px work clock display engine using registered hours
+                        startWorkTimer(data.checkInTimeRaw, data.shiftHours || 10);
                     } else if (data.status === "completed") {
                         showAlert("Shift workflow completely finished for today. Thank you!", "success");
+                        trackerBox.style.display = "none";
+                        if (workTimerInterval) clearInterval(workTimerInterval);
                     }
                 } catch (err) {
                     showAlert("Network fault: Couldn't establish a link to the Render backend server.", "error");
@@ -448,7 +563,6 @@
             if(data.success) {
                 showAlert(data.message, "success");
                 checkUserStatus(); 
-                // SPARK: Automatically updates dashboard metrics immediately following clock-in/out
                 updateActiveStaffCount();
             } else {
                 showAlert(data.message, "error");
@@ -505,7 +619,6 @@
             restoreSavedTheme();
             startLiveClock();
             checkStoreAnnouncements();
-            // SPARK: Fires database request instantly upon initial page load
             updateActiveStaffCount();
         });
     </script>

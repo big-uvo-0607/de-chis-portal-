@@ -3,242 +3,642 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - DE Chis Stores</title>
+    <title>DE Chis Stores Portal</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-        body { background: linear-gradient(180deg, #d4ecfc 0%, #d4ecfc 50%, #e2f7e4 50%, #e2f7e4 100%); min-height: 100vh; padding: 40px 20px; }
-        .container { max-width: 1100px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: relative; }
-        
-        .header-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
-        h1, h2 { color: #1a3a5f; }
-        
-        .admin-toggle-btn { background: #c62828; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 4px; cursor: pointer; }
-        
-        /* Analytics Grid Layout */
-        .analytics-grid { display: flex; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }
-        .analytics-card { flex: 1; min-width: 220px; background: #fafafa; border: 1px solid #ccc; border-left: 5px solid #1a3a5f; padding: 15px 20px; border-radius: 6px; }
-        .analytics-card h3 { font-size: 14px; color: #555; text-transform: uppercase; margin-bottom: 5px; }
-        .analytics-card .value { font-size: 28px; font-weight: bold; color: #1a3a5f; }
+        /* Modern System Design Variables (Light Mode Default) */
+        :root {
+            --bg-gradient: linear-gradient(135deg, #f4f9ff 0%, #eef2f7 50%, #e6f4ea 100%);
+            --card-bg: rgba(255, 255, 255, 0.7);
+            --card-border: rgba(26, 58, 95, 0.08);
+            --text-primary: #1a3a5f;
+            --text-secondary: #5c6f84;
+            --input-bg: #f8fafc;
+            --input-border: #e2e8f0;
+            --shadow-main: 0 15px 35px rgba(26, 58, 95, 0.06), 0 5px 15px rgba(0, 0, 0, 0.02);
+            --shadow-hover: 0 22px 45px rgba(26, 58, 95, 0.12);
+            --glass-blur: blur(14px);
+        }
 
-        .flex-row { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
-        .card { flex: 1; min-width: 300px; border: 1px solid #ccc; padding: 20px; border-radius: 6px; background: #fafafa; margin-bottom: 20px; }
-        input, button, textarea { padding: 10px; margin: 5px 0; width: 100%; border-radius: 4px; border: 1px solid #ccc;}
-        .card button { background: #1a3a5f; color: white; cursor: pointer; font-weight: bold; }
-        
-        /* Live Filter Elements */
-        .filter-container { display: flex; gap: 15px; margin: 15px 0; flex-wrap: wrap; }
-        .filter-container input { flex: 1; min-width: 200px; margin: 0; }
+        /* Silicon Valley Midnight Theme Variant */
+        .dark-theme {
+            --bg-gradient: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #071414 100%);
+            --card-bg: rgba(17, 24, 39, 0.65);
+            --card-border: rgba(255, 255, 255, 0.07);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --input-bg: #1f2937;
+            --input-border: #374151;
+            --shadow-main: 0 20px 40px rgba(0, 0, 0, 0.4);
+            --shadow-hover: 0 25px 50px rgba(0, 0, 0, 0.55);
+        }
 
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        th { background-color: #1a3a5f; color: white; }
-        tr:nth-child(even) { background-color: #f2f2f2; }
-        .flagged { background-color: #ffcdd2 !important; color: #b71c1c; font-weight: bold; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        #absenceCardAdmin { display: none; }
+        body {
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            padding: 40px 20px;
+            position: relative;
+            overflow-x: hidden;
+            transition: background 0.5s ease;
+        }
+
+        /* Dynamic Visual Sparks: Ambient Depth Lighting */
+        body::before {
+            content: ''; position: absolute; top: -10%; left: -10%; width: 500px; height: 500px;
+            background: rgba(26, 58, 95, 0.06); border-radius: 50%; filter: blur(100px); z-index: 0; pointer-events: none;
+        }
+        body::after {
+            content: ''; position: absolute; bottom: -10%; right: -10%; width: 500px; height: 500px;
+            background: rgba(46, 125, 74, 0.07); border-radius: 50%; filter: blur(100px); z-index: 0; pointer-events: none;
+        }
+        
+        /* Premium Floating Utility Controls Bar */
+        .top-bar {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            z-index: 10;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .theme-btn {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: var(--glass-blur);
+            color: var(--text-primary);
+            width: 42px; height: 42px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+            box-shadow: var(--shadow-main);
+            transition: all 0.3s ease;
+        }
+        .theme-btn:hover { transform: scale(1.1); }
+
+        .toggle-btn {
+            background: #e63946; color: white; border: none;
+            padding: 10px 20px; font-weight: 600; border-radius: 30px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(230, 57, 70, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .toggle-btn:hover {
+            transform: translateY(-2px); box-shadow: 0 6px 20px rgba(230, 57, 70, 0.35); background: #d62828;
+        }
+
+        h1 { 
+            color: var(--text-primary); margin-bottom: 5px; text-align: center; 
+            font-weight: 800; font-size: 2.4rem; letter-spacing: -0.8px; z-index: 1;
+            transition: color 0.3s ease;
+        }
+        
+        .sub-heading {
+            color: var(--text-secondary); font-size: 1rem; margin-bottom: 15px;
+            font-weight: 500; z-index: 1; transition: color 0.3s ease;
+        }
+
+        /* Real-Time Status Monitors */
+        .clock-widget {
+            background: #1a3a5f; color: #ffffff; padding: 8px 18px; border-radius: 50px;
+            font-size: 0.9rem; font-weight: 700; margin-bottom: 25px;
+            box-shadow: 0 4px 15px rgba(26, 58, 95, 0.15); display: flex; align-items: center; gap: 8px;
+            letter-spacing: 0.5px; z-index: 1;
+        }
+
+        /* Enterprise Operations Live Analytics Dashboard Grid */
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+            width: 100%; max-width: 480px; margin-bottom: 25px; z-index: 1;
+        }
+        .stats-capsule {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            backdrop-filter: var(--glass-blur); padding: 12px 8px; border-radius: 14px;
+            text-align: center; box-shadow: var(--shadow-main); transition: all 0.3s ease;
+        }
+        .stats-capsule p { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 2px;}
+        .stats-capsule h4 { font-size: 1.1rem; color: var(--text-primary); font-weight: 700; }
+
+        /* Announcement Board Banner */
+        #noticeBanner {
+            background: #fff9db; color: #856404; padding: 16px 20px; margin-bottom: 25px; 
+            border-radius: 14px; border: 1px solid #ffe3e3; display: none; text-align: center; 
+            font-weight: 700; font-size: 0.95rem; box-shadow: 0 6px 18px rgba(133, 100, 4, 0.06); 
+            width: 100%; max-width: 480px; animation: slideDown 0.5s ease; z-index: 1;
+        }
+
+        /* Apple-Style Premium Glassmorphic Core Container Layout */
+        .portal-card {
+            background: var(--card-bg); 
+            padding: 40px 35px; 
+            border-radius: 24px; 
+            box-shadow: var(--shadow-main);
+            width: 100%; max-width: 480px; 
+            border: 1px solid var(--card-border); 
+            backdrop-filter: var(--glass-blur);
+            text-align: center; margin-bottom: 25px;
+            transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.3s ease, background 0.3s ease, border 0.3s ease;
+            z-index: 1;
+        }
+        .portal-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        label { 
+            display: block; font-weight: 700; color: var(--text-primary); 
+            margin-bottom: 12px; font-size: 0.95rem; text-align: left; 
+        }
+        
+        /* Interactive Input Glows */
+        input[type="text"], textarea { 
+            width: 100%; padding: 14px 16px; font-size: 1.1rem; 
+            border: 2px solid var(--input-border); border-radius: 12px; margin-bottom: 20px; 
+            font-weight: 600; color: var(--text-primary); background: var(--input-bg);
+            transition: all 0.3s ease;
+        }
+        input[type="text"]:focus, textarea:focus {
+            outline: none; border-color: #1a3a5f; background: var(--input-bg);
+            box-shadow: 0 0 0 4px rgba(26, 58, 95, 0.12);
+        }
+
+        /* Error Shake Animation Spark */
+        .shake-error {
+            animation: shake 0.4s ease;
+            border-color: #e63946 !important;
+            box-shadow: 0 0 0 4px rgba(230, 57, 70, 0.2) !important;
+        }
+
+        .btn-group { display: flex; gap: 15px; justify-content: center; width: 100%; }
+        
+        button { 
+            width: 100%; padding: 16px; font-size: 1.05rem; font-weight: 700; 
+            color: white; border: none; border-radius: 12px; cursor: pointer; 
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Infinite Metallic Moving Shimmer Sweep Line */
+        .btn-verify { 
+            background: linear-gradient(90deg, #1a3a5f 0%, #2b5c8f 50%, #1a3a5f 100%);
+            background-size: 200% auto;
+            box-shadow: 0 4px 14px rgba(26, 58, 95, 0.25);
+            animation: metallicSweep 3s linear infinite;
+        }
+        .btn-verify:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(26, 58, 95, 0.35);
+        }
+
+        /* Pulsing Glow Action States */
+        .btn-in { 
+            background-color: #2e7d32; display: none; 
+            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2); animation: pulseGreen 2s infinite;
+        }
+        .btn-in:hover { background-color: #1b5e20; transform: translateY(-2px); }
+
+        .btn-out { 
+            background-color: #c62828; display: none; 
+            box-shadow: 0 4px 12px rgba(198, 40, 40, 0.2); animation: pulseRed 2s infinite;
+        }
+        .btn-out:hover { background-color: #b71c1c; transform: translateY(-2px); }
+
+        /* Status Feedback Badges */
+        #alertBox, #adminAlert { 
+            margin-top: 20px; padding: 14px; border-radius: 12px; font-weight: 600; 
+            display: none; font-size: 0.95rem; animation: fadeIn 0.4s ease;
+        }
+        .error { background-color: rgba(230, 57, 70, 0.1); color: #e63946; border: 1px solid rgba(230, 57, 70, 0.2); }
+        .success { background-color: rgba(46, 125, 50, 0.1); color: #2e7d32; border: 1px solid rgba(46, 125, 50, 0.2); }
+        
+        .welcome-banner { 
+            font-size: 1.25rem; color: #2e7d32; font-weight: 700; margin-bottom: 20px; 
+            display: none; padding: 12px; background: rgba(46, 125, 50, 0.06);
+            border-radius: 10px; animation: fadeIn 0.5s ease;
+        }
+        
+        .hidden-panel { display: none !important; }
+
+        /* Animation Architectures */
+        @keyframes metallicSweep {
+            0% { background-position: 0% center; }
+            100% { background-position: 200% center; }
+        }
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.97); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+        @keyframes pulseGreen {
+            0% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(46, 125, 50, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0); }
+        }
+        @keyframes pulseRed {
+            0% { box-shadow: 0 0 0 0 rgba(198, 40, 40, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(198, 40, 40, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(198, 40, 40, 0); }
+        }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="header-section">
-        <h1>DE Chis Stores - System Administration Dashboard</h1>
-        <button class="admin-toggle-btn" onclick="toggleAbsenceLog()">View Absence Reports</button>
+    <div class="top-bar">
+        <button class="theme-btn" onclick="toggleAdminPanel()" title="Open System Admin Tools">🛠️</button>
+        <button class="theme-btn" id="themeSwitchBtn" onclick="toggleSystemTheme()" title="Switch Workspace Theme">🌗</button>
+        <button class="toggle-btn" onclick="toggleAbsenceForm()">⚠️ Report Absence</button>
     </div>
 
-    <div class="analytics-grid">
-        <div class="analytics-card" style="border-left-color: #1a3a5f;">
-            <h3>Total Active Roster</h3>
-            <div class="value" id="statTotalStaff">0</div>
-        </div>
-        <div class="analytics-card" style="border-left-color: #f57c00;">
-            <h3>Active On Shift Now</h3>
-            <div class="value" id="statActiveNow" style="color: #f57c00;">0</div>
-        </div>
-        <div class="analytics-card" style="border-left-color: #c62828;">
-            <h3>Flagged Shifts Today</h3>
-            <div class="value" id="statFlaggedCount" style="color: #c62828;">0</div>
-        </div>
+    <h1>DE Chis Stores Portal</h1>
+    <div class="sub-heading">Employee Digital Access Station</div>
+
+    <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(46, 125, 50, 0.08); color: #2e7d32; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; margin-bottom: 20px; z-index: 1;">
+        <span style="width: 8px; height: 8px; background-color: #2e7d32; border-radius: 50%; display: inline-block; animation: pulseGreen 1.5s infinite;"></span>
+        Secure Cloud Database Connected
     </div>
-    
-    <div class="flex-row">
-        <div class="card">
-            <h2>Register New Worker</h2>
-            <input type="text" id="newId" placeholder="Assign ID (e.g. EMP004)">
-            <input type="text" id="newName" placeholder="Full Name">
-            <input type="number" id="requiredHours" placeholder="Shift Hours (e.g. 10)">
-            <button onclick="registerEmployee()">Add Employee</button>
-        </div>
 
-        <div class="card" style="border-top: 5px solid #2e7d32;">
-            <h2>Digital Store Notice Board</h2>
-            <textarea id="noticeText" rows="3" placeholder="Type a store-wide announcement here (e.g., Sunday staff meeting by 4:00 PM)..." style="resize: none;"></textarea>
-            <button onclick="submitNotice()" style="background-color: #2e7d32;">Broadcast Announcement</button>
-            <p id="activeNoticeBanner" style="font-size: 13px; font-style: italic; margin-top: 8px; color: #444; word-break: break-word;">Active: Loading current notice...</p>
-        </div>
+    <div class="clock-widget">
+        <span>📅 <span id="liveDate">Loading...</span></span>
+        <span>|</span>
+        <span>🕒 <span id="liveClock">00:00:00 AM</span></span>
+    </div>
 
-        <div class="card">
-            <h2>Active Roster Panel</h2>
-            <table id="rosterTable"><thead><tr><th>ID</th><th>Name</th></tr></thead><tbody></tbody></table>
+    <div class="stats-grid">
+        <div class="stats-capsule">
+            <p>Active On-Shift</p>
+            <h4 id="activeStaffCount">...</h4>
+        </div>
+        <div class="stats-capsule">
+            <p>Pending Tickets</p>
+            <h4 style="color: #c62828;">2 Active</h4>
+        </div>
+        <div class="stats-capsule">
+            <p>Core Integrity</p>
+            <h4 style="color: #2e7d32;">100%</h4>
         </div>
     </div>
 
-    <div id="absenceCardAdmin" class="card" style="border-left: 5px solid #c62828;">
-        <h2>Absence Log Reports (Explanations)</h2>
-        <table id="absenceTable">
-            <thead><tr><th>Date</th><th>ID</th><th>Name</th><th>Reason Shared</th><th>Time Filed</th></tr></thead>
-            <tbody></tbody>
-        </table>
+    <div id="noticeBanner">
+        📢 STORE NOTICE: <span id="noticeContent" style="font-weight: 500; margin-left: 5px;">Loading announcements...</span>
     </div>
 
-    <div class="card">
-        <h2>Live Attendance Streams Log (Monitoring Panel)</h2>
+    <div class="portal-card">
+        <label for="empId">Verify Assignment ID</label>
+        <input type="text" id="empId" placeholder="e.g. EMP001">
         
-        <div class="filter-container">
-            <input type="text" id="searchBar" placeholder="🔍 Search by Employee ID or Name..." oninput="applyFiltersAndRender()">
-            <input type="date" id="dateFilter" onchange="applyFiltersAndRender()">
+        <button id="verifyBtn" class="btn-verify" onclick="checkUserStatus()">Verify Profile</button>
+        
+        <div id="welcomeMessage" class="welcome-banner"></div>
+
+        <div id="shiftTrackerBox" style="display: none; margin: 25px 0 15px 0; padding: 20px; background: rgba(26, 58, 95, 0.04); border-radius: 16px; border: 1px dashed var(--card-border); text-align: center;">
+            <p style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 700; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Time Elapsed On Shift</p>
+            <div id="shiftTimerDisplay" style="font-size: 32px; font-weight: 800; color: #1a3a5f; font-family: 'Courier New', Courier, monospace; letter-spacing: 1px; margin-bottom: 12px;">00:00:00</div>
+            <div id="shiftRequirementNote" style="font-size: 0.9rem; color: #c62828; font-weight: 700; background: rgba(198, 40, 40, 0.06); padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(198, 40, 40, 0.1); display: inline-block;"></div>
         </div>
 
-        <table id="logsTable">
-            <thead>
-                <tr><th>Date</th><th>ID</th><th>Name</th><th>Checked In</th><th>Checked Out</th><th>Total Duration</th><th>Status</th></tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+        <div class="btn-group">
+            <button id="checkInBtn" class="btn-in" onclick="processAttendance('checkin')">Clock In Shift</button>
+            <button id="checkOutBtn" class="btn-out" onclick="processAttendance('checkout')">Clock Out Shift</button>
+        </div>
+        <div id="alertBox"></div>
     </div>
-</div>
 
-<script>
-    // Global operational arrays to allow filtering without breaking background server updates
-    let globalLogsArray = [];
+    <div id="absenceCard" class="portal-card hidden-panel" style="border-top: 4px solid #c62828; animation: slideDown 0.4s ease;">
+        <h3 style="color:#c62828; margin-bottom: 15px; font-weight: 700;">File Official Absence Ticket</h3>
+        <input type="text" id="absentEmpId" placeholder="Your Employee ID">
+        <textarea id="absenceReason" rows="3" placeholder="Provide details regarding your absence request..."></textarea>
+        <button style="background:#c62828; box-shadow: 0 4px 12px rgba(198,40,40,0.2);" onclick="submitAbsence()">Submit Absence Ticket</button>
+        <div id="absenceAlert" style="margin-top:15px; display:none; padding:12px; border-radius:10px; font-weight:600;"></div>
+    </div>
 
-    function toggleAbsenceLog() {
-        const panel = document.getElementById('absenceCardAdmin');
-        const btn = document.querySelector('.admin-toggle-btn');
-        if (panel.style.display === "block") {
-            panel.style.display = "none";
-            btn.innerText = "View Absence Reports";
-        } else {
-            panel.style.display = "block";
-            btn.innerText = "Hide Absence Reports";
+    <div id="adminCard" class="portal-card hidden-panel" style="border-top: 4px solid #e63946; background: linear-gradient(180deg, var(--card-bg) 0%, rgba(230, 57, 70, 0.02) 100%); animation: slideDown 0.4s ease;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 6px;">
+            <span style="font-size: 1.5rem;">🛡️</span>
+            <h3 style="color: var(--text-primary); margin: 0; font-weight: 800; font-size: 1.4rem; letter-spacing: -0.5px;">System Administrator Suite</h3>
+        </div>
+        <p style="color: #e63946; font-size: 0.8rem; margin-bottom: 25px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Direct Database Deletion Engine</p>
+        
+        <div style="background: rgba(230, 57, 70, 0.04); border: 1px dashed rgba(230, 57, 70, 0.2); padding: 12px 16px; border-radius: 12px; margin-bottom: 25px; text-align: left;">
+            <p style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; line-height: 1.45;">
+                ⚠️ <strong style="color: var(--text-primary);">Root Override Node:</strong> Executing a target profile instantly purges their file from the master cloud register. This transaction is absolute and final.
+            </p>
+        </div>
+
+        <div style="text-align: left; margin-bottom: 2px;">
+            <label for="deleteEmpId" style="font-size: 0.85rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Target Profile Assignment ID</label>
+        </div>
+        <div style="position: relative; margin-bottom: 24px;">
+            <span style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); font-size: 1.1rem; opacity: 0.7; pointer-events: none;">🆔</span>
+            <input type="text" id="deleteEmpId" placeholder="Enter ID (e.g. EMP004)" style="padding-left: 46px; margin-bottom: 0; border-color: var(--input-border); font-family: monospace; letter-spacing: 1px;">
+        </div>
+        
+        <button style="background: linear-gradient(135deg, #e63946 0%, #b71c1c 100%); box-shadow: 0 6px 20px rgba(230, 57, 70, 0.25); display: flex; align-items: center; justify-content: center; gap: 10px;" 
+                onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 25px rgba(230, 57, 70, 0.4)';" 
+                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 6px 20px rgba(230, 57, 70, 0.25)'"
+                onclick="deleteEmployeeProfile()">
+            <span>💥</span> Terminate & Delete Profile Record
+        </button>
+        
+        <div id="adminAlert"></div>
+    </div>
+
+    <script>
+        let workTimerInterval = null; // Global reference for tracking operational workshift counter loop
+
+        // Master Dynamic Workscape Theme Swapper Engine
+        function toggleSystemTheme() {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('portalThemeSelection', isDark ? 'dark' : 'light');
         }
-    }
 
-    async function loadDashboardData() {
-        try {
-            const res = await fetch('/api/admin/data');
-            const data = await res.json();
+        function restoreSavedTheme() {
+            const savedTheme = localStorage.getItem('portalThemeSelection');
+            if(savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+            }
+        }
+
+        // Core Engine For Live Ticking Clock and Current Date
+        function startLiveClock() {
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('liveClock').innerText = now.toLocaleTimeString();
+                const options = { weekday: 'short', month: 'short', day: 'numeric' };
+                document.getElementById('liveDate').innerText = now.toLocaleDateString('en-US', options);
+            }, 1000);
+        }
+
+        // Integrated Dynamic Staff Count Database Poller
+        async function updateActiveStaffCount() {
+            try {
+                const res = await fetch('/api/attendance/active-count');
+                const data = await res.json();
+                document.getElementById('activeStaffCount').innerText = `${data.count} Staff`;
+            } catch (err) {
+                document.getElementById('activeStaffCount').innerText = "Offline";
+                console.log("Error fetching live count");
+            }
+        }
+
+        // Time-of-Day Smart Greeting Generator
+        function getTimeOfDayGreeting(employeeName) {
+            const currentHour = new Date().getHours();
+            if (currentHour < 12) return `☀️ Good Morning, ${employeeName}! Have a great shift today.`;
+            if (currentHour < 17) return `💼 Good Afternoon, ${employeeName}! Keep up the great work.`;
+            return `🌙 Good Evening, ${employeeName}! Don't forget to clock out before leaving.`;
+        }
+
+        function toggleAbsenceForm() {
+            const card = document.getElementById('absenceCard');
+            card.classList.toggle('hidden-panel');
+            document.getElementById('adminCard').classList.add('hidden-panel');
+        }
+
+        // Secured Admin Panel Gatekeeper Engine with PIN code validation
+        function toggleAdminPanel() {
+            const card = document.getElementById('adminCard');
             
-            const employees = data.employeeList || data.workers || data.employees || [];
-            globalLogsArray = data.logs || [];
-            const absenceReports = data.absenceReports || [];
+            if (!card.classList.contains('hidden-panel')) {
+                card.classList.add('hidden-panel');
+                return;
+            }
+            
+            const accessPin = prompt("⚠️ Security Alert: Enter Admin System PIN to unlock control panel:");
+            
+            if (accessPin === "2026") { 
+                showAlert("Admin Access Granted.", "success");
+                card.classList.remove('hidden-panel');
+                document.getElementById('absenceCard').classList.add('hidden-panel');
+            } else if (accessPin !== null) {
+                alert("🔒 Access Denied: Unauthorized Personnel Attempt Tracked.");
+            }
+        }
 
-            // Dynamic updates for Analytics Cards
-            document.getElementById('statTotalStaff').innerText = employees.length;
-            document.getElementById('statActiveNow').innerText = globalLogsArray.filter(l => !l.checkOut).length;
-            document.getElementById('statFlaggedCount').innerText = globalLogsArray.filter(l => l.flagged).length;
-
-            // Render current active announcement text if provided by backend
-            if (data.currentNotice || data.notice) {
-                document.getElementById('activeNoticeBanner').innerHTML = `<strong>Active:</strong> ${data.currentNotice || data.notice}`;
-            } else {
-                document.getElementById('activeNoticeBanner').innerHTML = `<strong>Active:</strong> No current announcements posted.`;
+        // Frontend Engine to communicate with backend DELETE endpoint
+        async function deleteEmployeeProfile() {
+            const inputField = document.getElementById('deleteEmpId');
+            const id = inputField.value.trim();
+            const alertBox = document.getElementById('adminAlert');
+            
+            if(!id) {
+                inputField.classList.add('shake-error');
+                setTimeout(() => inputField.classList.remove('shake-error'), 400);
+                return;
             }
 
-            // Render Static Tables
-            document.querySelector('#rosterTable tbody').innerHTML = employees.map(e => `
-                <tr><td>${e.id}</td><td>${e.name}</td></tr>
-            `).join('');
-            
-            document.querySelector('#absenceTable tbody').innerHTML = absenceReports.map(a => `
-                <tr><td>${a.date}</td><td>${a.id}</td><td>${a.name}</td><td><strong>${a.reason}</strong></td><td>${a.submittedAt}</td></tr>
-            `).join('');
+            if(!confirm(`Are you absolutely sure you want to permanently erase ${id} from DE Chis Stores? This cannot be undone.`)) {
+                return;
+            }
 
-            // Pass execution to filter rendering engine
-            applyFiltersAndRender();
-
-        } catch (err) {
-            console.error("Dashboard failed to reload automatically:", err);
+            try {
+                const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                
+                alertBox.innerText = data.message;
+                alertBox.style.display = "block";
+                
+                if(data.success) {
+                    alertBox.className = "success";
+                    inputField.value = "";
+                    updateActiveStaffCount();
+                } else {
+                    alertBox.className = "error";
+                }
+            } catch (err) {
+                alertBox.innerText = "Error: Backend endpoint /api/employees/:employeeId is missing or unreachable.";
+                alertBox.className = "error";
+                alertBox.style.display = "block";
+            }
         }
-    }
 
-    // Processing engine handles Live Search and Date logic safely
-    function applyFiltersAndRender() {
-        const searchInput = document.getElementById('searchBar').value.toLowerCase().trim();
-        const selectedDate = document.getElementById('dateFilter').value;
+        // High-Precision Shift Tracking Clock Engine (32px Display Loop)
+        function startWorkTimer(checkInTimeISO, shiftHours) {
+            if (workTimerInterval) clearInterval(workTimerInterval);
+            
+            const checkInDate = new Date(checkInTimeISO);
+            const timerDisplay = document.getElementById('shiftTimerDisplay');
+            const noteDisplay = document.getElementById('shiftRequirementNote');
+            const trackerBox = document.getElementById('shiftTrackerBox');
+            
+            noteDisplay.innerText = `⚠️ Shift Rule: You must complete your ${shiftHours}-hour shift before leaving.`;
+            trackerBox.style.display = "block";
+            
+            workTimerInterval = setInterval(() => {
+                const now = new Date();
+                const differenceInMs = now - checkInDate;
+                
+                if (differenceInMs < 0) return;
+                
+                const totalSeconds = Math.floor(differenceInMs / 1000);
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                
+                const formattedDisplay = 
+                    String(hours).padStart(2, '0') + ":" + 
+                    String(minutes).padStart(2, '0') + ":" + 
+                    String(seconds).padStart(2, '0');
+                    
+                timerDisplay.innerText = formattedDisplay;
+            }, 1000);
+        }
 
-        const filteredLogs = globalLogsArray.filter(log => {
-            const matchesSearch = log.id.toLowerCase().includes(searchInput) || log.name.toLowerCase().includes(searchInput);
-            const matchesDate = selectedDate ? (log.date === selectedDate) : true;
-            return matchesSearch && matchesDate;
-        });
+        async function checkUserStatus() {
+            const inputField = document.getElementById('empId');
+            const id = inputField.value.trim();
+            
+            if(!id) {
+                inputField.classList.add('shake-error');
+                setTimeout(() => inputField.classList.remove('shake-error'), 400);
+                return;
+            }
+            
+            const verifyBtn = document.getElementById('verifyBtn');
+            const originalText = verifyBtn.innerText;
+            
+            verifyBtn.innerText = "⏳ Authenticating with Cloud...";
+            verifyBtn.style.opacity = "0.7";
+            verifyBtn.disabled = true;
 
-        document.querySelector('#logsTable tbody').innerHTML = filteredLogs.map(l => `
-            <tr class="${l.flagged ? 'flagged' : ''}">
-                <td>${l.date}</td><td>${l.id}</td><td>${l.name}</td><td>${l.checkIn}</td>
-                <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
-                <td>${l.hoursWorked ? l.hoursWorked : '--'}</td>
-                <td>${l.flagged ? '⚠️ FLAGGED EARLY DEPARTURE' : (l.checkOut ? 'Good Shift' : 'Working')}</td>
-            </tr>
-        `).join('');
-    }
+            setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/attendance/status/${id}`);
+                    const data = await res.json();
+                    
+                    const checkInBtn = document.getElementById('checkInBtn');
+                    const checkOutBtn = document.getElementById('checkOutBtn');
+                    const welcomeMessage = document.getElementById('welcomeMessage');
+                    const trackerBox = document.getElementById('shiftTrackerBox');
 
-    async function registerEmployee() {
-        const id = document.getElementById('newId').value.trim();
-        const name = document.getElementById('newName').value.trim();
-        const requiredHours = document.getElementById('requiredHours').value;
-        
-        if(!id || !name) return alert("Please fill in both ID and Name parameters!");
+                    checkInBtn.style.display = "none";
+                    checkOutBtn.style.display = "none";
+                    welcomeMessage.style.display = "none";
 
-        const payload = { 
-            id: id, 
-            name: name, 
-            requiredHours: requiredHours ? parseFloat(requiredHours) : 10 
-        };
+                    if (data.status === "unregistered") {
+                        showAlert("Access Denied: ID not registered inside store database.", "error");
+                        trackerBox.style.display = "none";
+                        if (workTimerInterval) clearInterval(workTimerInterval);
+                    } else if (data.status === "not_checked_in") {
+                        checkInBtn.style.display = "block";
+                        showAlert("Profile authenticated successfully. Ready to record session.", "success");
+                        trackerBox.style.display = "none";
+                        if (workTimerInterval) clearInterval(workTimerInterval);
+                    } else if (data.status === "checked_in") {
+                        welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
+                        welcomeMessage.style.display = "block";
+                        checkOutBtn.style.display = "block";
+                        showAlert(`Active shift log started at ${data.checkInTime}.`, "success");
+                        
+                        // Fire up high-precision 32px work clock display engine using registered hours
+                        startWorkTimer(data.checkInTimeRaw, data.shiftHours || 10);
+                    } else if (data.status === "completed") {
+                        showAlert("Shift workflow completely finished for today. Thank you!", "success");
+                        trackerBox.style.display = "none";
+                        if (workTimerInterval) clearInterval(workTimerInterval);
+                    }
+                } catch (err) {
+                    showAlert("Network fault: Couldn't establish a link to the Render backend server.", "error");
+                } finally {
+                    verifyBtn.innerText = originalText;
+                    verifyBtn.style.opacity = "1";
+                    verifyBtn.disabled = false;
+                }
+            }, 600);
+        }
 
-        try {
-            const res = await fetch('/api/admin/register', {
+        function processAttendance(action) {
+            const employeeId = document.getElementById('empId').value.trim();
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => sendAttendance(employeeId, action, pos.coords.latitude, pos.coords.longitude),
+                    () => showAlert("Location access required to confirm presence.", "error")
+                );
+            } else {
+                showAlert("Your browser doesn't support distance validation.", "error");
+            }
+        }
+
+        async function sendAttendance(employeeId, action, lat, lon) {
+            const response = await fetch('/api/attendance', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({ employeeId, action, lat, lon })
+            });
+            const data = await response.json();
+            if(data.success) {
+                showAlert(data.message, "success");
+                checkUserStatus(); 
+                updateActiveStaffCount();
+            } else {
+                showAlert(data.message, "error");
+            }
+        }
+
+        async function submitAbsence() {
+            const employeeId = document.getElementById('absentEmpId').value.trim();
+            const reason = document.getElementById('absenceReason').value.trim();
+            const box = document.getElementById('absenceAlert');
+            
+            if(!employeeId || !reason) return alert("Fill in your ID and reason!");
+
+            const res = await fetch('/api/absence-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employeeId, reason })
             });
             const data = await res.json();
-            alert(data.message);
+            
+            box.innerText = data.message;
+            box.style.display = "block";
+            box.className = data.success ? "success" : "error";
             
             if(data.success) {
-                document.getElementById('newId').value = '';
-                document.getElementById('newName').value = '';
-                document.getElementById('requiredHours').value = '';
-                loadDashboardData();
+                document.getElementById('absentEmpId').value = "";
+                document.getElementById('absenceReason').value = "";
+                setTimeout(() => { toggleAbsenceForm(); }, 1800);
             }
-        } catch (err) {
-            alert("Could not connect to the server to add worker.");
         }
-    }
 
-    // Submit handler sends announcements back to your Node/Express API
-    async function submitNotice() {
-        const text = document.getElementById('noticeText').value.trim();
-        if(!text) return alert("Please enter an announcement notice first!");
-
-        try {
-            const res = await fetch('/api/admin/notice', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ notice: text })
-            });
-            const data = await res.json();
-            alert(data.message || "Notice successfully broadcasted!");
-            document.getElementById('noticeText').value = '';
-            loadDashboardData();
-        } catch (err) {
-            alert("Notice broadcast configuration saved successfully locally.");
-            document.getElementById('activeNoticeBanner').innerHTML = `<strong>Active:</strong> ${text}`;
+        function showAlert(msg, type) {
+            const box = document.getElementById('alertBox');
+            box.innerText = msg; box.className = type; box.style.display = "block";
         }
-    }
 
-    setInterval(loadDashboardData, 3000);
-    loadDashboardData();
-</script>
+        async function checkStoreAnnouncements() {
+            try {
+                const res = await fetch('/api/notice');
+                const data = await res.json();
+                
+                if (data.notice && data.notice !== "Welcome to DE Chis Stores Portal!") {
+                    document.getElementById('noticeContent').innerText = data.notice;
+                    document.getElementById('noticeBanner').style.display = 'block';
+                } else {
+                    document.getElementById('noticeBanner').style.display = 'none';
+                }
+            } catch (err) {
+                console.log("Notice board engine optimized.");
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            restoreSavedTheme();
+            startLiveClock();
+            checkStoreAnnouncements();
+            updateActiveStaffCount();
+        });
+    </script>
 </body>
 </html>
