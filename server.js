@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 5000;
 // Universal Middleware Layout
 app.use(cors());
 app.use(express.json());
+app.use(express.static(__dirname)); // ⭐ ADDED: Tells the server to host your HTML/CSS files from this folder
 
 // ==========================================
 // MONGODB ATLAS SCHEMAS & CONFIGURATIONS
@@ -200,6 +201,11 @@ app.get('/api/notice', async (req, res) => {
     } catch (err) {
         res.json({ notice: "Welcome to DE Chis Stores Portal!" });
     }
+});
+
+// 7. Catch-All Routing Interface Delivery
+app.get('*', (req, res) => {
+    res.sendFile(__dirname + '/index.html'); // ⭐ ADDED: Automatically delivers your portal UI to anyone opening your Render URL
 });
 
 // Initialize System Engine Server Listening Mode
