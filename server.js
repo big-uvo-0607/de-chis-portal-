@@ -2,7 +2,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const path = require('path'); // Handles system-agnostic folder paths
+const path = require('path'); 
+const fs = require('fs'); // Added to physically scan and inspect files on Render
 require('dotenv').config();
 
 const app = express();
@@ -12,6 +13,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname)); 
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
 // MONGODB ATLAS SCHEMAS & CONFIGURATIONS
@@ -56,7 +58,7 @@ async function runSystemSeedingEngine() {
                 name: "Chisom",
                 shiftHours: 10
             });
-            console.log("🌱 [SEED ENGINE]: Local deployment target profile verified & inserted (EMP001).");
+            console.log("🌱 [SEED ENGINE]: Profile verified & inserted (EMP001).");
         }
     } catch (err) {
         console.error("❌ Seed core generation delayed:", err.message);
@@ -71,7 +73,6 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/de_chis_sto
     .catch(function(err) {
         console.error('❌ Connection Failure in MongoDB Engine:', err);
     });
-
 
 // ==========================================
 // PORTAL API OPERATIONAL ENDPOINTS
@@ -144,7 +145,7 @@ app.post('/api/attendance', async function(req, res) {
                 longitude: lon
             });
             await newShift.save();
-            return res.json({ success: true, message: "Shift punched and logged successfully into cloud repository." });
+            return res.json({ success: true, message: "Shift punched and logged successfully." });
         } 
         
         if (action === 'checkout') {
@@ -176,9 +177,9 @@ app.post('/api/absence-report', async function(req, res) {
 
         const newTicket = new Absence({ employeeId: employeeId, reason: reason });
         await newTicket.save();
-        return res.json({ success: true, message: "Absence Ticket routed smoothly to store administrative office." });
+        return res.json({ success: true, message: "Absence Ticket routed smoothly." });
     } catch (err) {
-        return res.status(500).json({ success: false, message: "Database transmission delay. Try again." });
+        return res.status(500).json({ success: false, message: "Database transmission delay." });
     }
 });
 
@@ -192,7 +193,7 @@ app.delete('/api/employees/:employeeId', async function(req, res) {
 
         await Employee.deleteOne({ employeeId: id });
         await Attendance.deleteMany({ employeeId: id, checkOutTime: null });
-        return res.json({ success: true, message: `Profile execution complete: ${id} scrubbed from cloud server environment.` });
+        return res.json({ success: true, message: `Profile execution complete.` });
     } catch (err) {
         return res.status(500).json({ success: false, message: "Administrative override terminal network failure." });
     }
@@ -211,11 +212,54 @@ app.get('/api/notice', async function(req, res) {
     }
 });
 
-// Catch-All Interface Loader mapped safely using absolute Linux paths
+// Smart Catch-All Interface Loader (Checks multiple name formats and subfolders)
 app.get('*', function(req, res) {
-    res.sendFile(path.join(__dirname, 'index.html')); 
+    const fallbackPaths = [
+        path.join(__dirname, 'index.html'),
+        path.join(__dirname, 'Index.html'),
+        path.join(__dirname, 'public', 'index.html'),
+        path.join(__dirname, 'public', 'Index.html')
+    ];
+
+    for (let targetPath of fallbackPaths) {
+        if (fs.existsSync(targetPath)) {
+            return res.sendFile(targetPath);
+        }
+    }
+
+    // Emergency UI placeholder if the HTML file completely failed to upload to GitHub
+    res.status(200).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #f4f6f9; color: #333; padding: 50px 20px; }
+                .card { background: white; max-width: 500px; margin: 0 auto; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+                h1 { color: #2c3e50; font-size: 24px; margin-bottom: 10px; }
+                p { color: #7f8c8d; font-size: 16px; line-height: 1.6; }
+                .badge { background: #e67e22; color: white; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; display: inline-block; margin-bottom: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="badge">SYSTEM ONLINE</div>
+                <h1>DE CHIS STORES WORKERS PORTAL</h1>
+                <p>The core application database and background engine are fully live and operational.</p>
+                <p style="color: #e74c3c; font-weight: 500;">Notice: The main user interface file (index.html) is missing from your GitHub root directory folder. Please push your index.html file to bring up the main dashboard screen.</p>
+            </div>
+        </body>
+        </html>
+    `);
 });
 
 app.listen(PORT, function() {
     console.log(`📡 DE CHIS Operational Grid Core broadcast active on port: ${PORT}`);
+    try {
+        // This will print out exactly what files are present on Render to help us instantly inspect the server directory
+        const filesFound = fs.readdirSync(__dirname);
+        console.log("📂 [DIRECTORY SCANNER] Found files inside Render root folder:", filesFound);
+    } catch(e) {
+        console.log("❌ Folder scanning error:", e.message);
+    }
 });
