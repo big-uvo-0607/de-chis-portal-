@@ -160,7 +160,7 @@
             box-shadow: 0 0 0 4px rgba(26, 58, 95, 0.12);
         }
         textarea {
-            resize: vertical; /* Prevents tearing layout cards apart */
+            resize: vertical;
         }
 
         .shake-error {
@@ -175,6 +175,14 @@
             width: 100%; padding: 16px; font-size: 1.05rem; font-weight: 700; 
             color: white; border: none; border-radius: 12px; cursor: pointer; 
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Prevent layout spam clicking visually */
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
         }
 
         .btn-verify { 
@@ -329,6 +337,8 @@
 
     <script>
         let workTimerInterval = null; 
+        // Global system lock to handle asynchronous race conditions
+        let isProcessingAttendance = false;
 
         function toggleSystemTheme() {
             document.body.classList.toggle('dark-theme');
@@ -518,14 +528,34 @@
         }
 
         function processAttendance(action) {
+            // Drop out immediately if a punch is already in flight
+            if (isProcessingAttendance) return;
+
             const employeeId = document.getElementById('empId').value.trim();
+            const checkInBtn = document.getElementById('checkInBtn');
+            const checkOutBtn = document.getElementById('checkOutBtn');
+
+            // Lock gates and freeze buttons instantly on click
+            isProcessingAttendance = true;
+            checkInBtn.disabled = true;
+            checkOutBtn.disabled = true;
+
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (pos) => sendAttendance(employeeId, action, pos.coords.latitude, pos.coords.longitude),
-                    () => showAlert("Location access required to confirm presence.", "error")
+                    () => {
+                        showAlert("Location access required to confirm presence.", "error");
+                        // Release lock if geo setup drops an error
+                        isProcessingAttendance = false;
+                        checkInBtn.disabled = false;
+                        checkOutBtn.disabled = false;
+                    }
                 );
             } else {
                 showAlert("Your browser doesn't support distance validation.", "error");
+                isProcessingAttendance = false;
+                checkInBtn.disabled = false;
+                checkOutBtn.disabled = false;
             }
         }
 
@@ -539,13 +569,18 @@
                 const data = await response.json();
                 if(data.success) {
                     showAlert(data.message, "success");
-                    checkUserStatus(); 
+                    await checkUserStatus(); 
                     updateActiveStaffCount();
                 } else {
                     showAlert(data.message, "error");
                 }
             } catch (err) {
                 showAlert("Network fault: Failed to transfer attendance signature data.", "error");
+            } finally {
+                // Safely drop internal state flags to allow future shifts
+                isProcessingAttendance = false;
+                document.getElementById('checkInBtn').disabled = false;
+                document.getElementById('checkOutBtn').disabled = false;
             }
         }
 

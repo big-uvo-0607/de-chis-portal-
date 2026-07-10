@@ -6,24 +6,42 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 
 // ========================================================
-// DIRECT EXPLICIT ROUTING FIX (Forces Render to send files)
+// FOLDER PATH CORRECTION (Matches your public/ folder setup)
 // ========================================================
-// This handles loading the homepage panel
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    const filePath = path.join(__dirname, 'public', 'index.html');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            res.status(404).send("<h1>DE CHIS STORES Portal</h1><p>index.html not found inside the public folder.</p>");
+        }
+    });
 });
 
-// This handles loading your index.html directly
 app.get('/index.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    const filePath = path.join(__dirname, 'public', 'index.html');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            res.status(404).send("<h1>Error</h1><p>index.html not found inside public folder.</p>");
+        }
+    });
 });
 
-// This explicitly catches the admin.html request and sends the file
 app.get('/admin.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin.html'));
+    let filePath = path.join(__dirname, 'admin.html');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            filePath = path.join(__dirname, 'public', 'admin.html');
+            res.sendFile(filePath, (err2) => {
+                if (err2) {
+                    res.status(404).send("<h1>Error</h1><p>admin.html not found in root or public folder.</p>");
+                }
+            });
+        }
+    });
 });
 
-// Backup static assets provider for CSS/JS files sitting in root
+// Serve all other static assets (like CSS/JS) from the public folder automatically
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname)));
 
 // ========================================================
@@ -231,15 +249,4 @@ app.delete('/api/employees/:id', (req, res) => {
     res.status(404).json({ success: false, message: "Target ID not found." });
 });
 
-app.post('/api/absence-report', (req, res) => {
-    const { employeeId, reason } = req.body;
-    const id = employeeId.toUpperCase();
-    if (!employees[id]) return res.status(400).json({ success: false, message: "ID unregistered." });
-    
-    console.log(`[ABSENCE INCIDENT] Employee: ${id} - Reason: ${reason}`);
-    res.json({ success: true, message: "Absence ticket filed directly into management console." });
-});
-
-app.listen(PORT, () => {
-    console.log(`[DE CHIS STORES PORTAL ACTIVE WITH CUSTOM SHIFT LOCKS ON PORT ${PORT}]`);
-});
+app.post('/api/absence-report', (req
