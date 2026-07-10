@@ -9,7 +9,6 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Universal Middleware Layout
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname)); 
@@ -52,12 +51,10 @@ async function runSystemSeedingEngine() {
     try {
         const checkSeed = await Employee.findOne({ employeeId: "EMP001" });
         if (!checkSeed) {
-            await Employee.create({
-                employeeId: "EMP001",
-                name: "Chisom",
-                shiftHours: 10
-            });
-            console.log("🌱 [SEED ENGINE]: Profile verified & inserted (EMP001).");
+            await Employee.create({ employeeId: "EMP001", name: "Chisom", shiftHours: 10 });
+            await Employee.create({ employeeId: "EMP002", name: "John", shiftHours: 10 });
+            await Employee.create({ employeeId: "EMP003", name: "Blessing", shiftHours: 10 });
+            console.log("🌱 [SEED ENGINE]: Roster profiles mapped and synchronized.");
         }
     } catch (err) {
         console.error("❌ Seed core generation delayed:", err.message);
@@ -86,13 +83,29 @@ app.get('/api/attendance/active-count', async function(req, res) {
     }
 });
 
+// Admin-facing Management Registry Fetcher (Feeds the visual directory table)
+app.get('/api/management/employees', async function(req, res) {
+    try {
+        const employees = await Employee.find().lean();
+        const activeShifts = await Attendance.find({ checkOutTime: null }).select('employeeId');
+        const activeIds = activeShifts.map(shift => shift.employeeId);
+        
+        const mappedRoster = employees.map(emp => {
+            emp.hasActiveShift = activeIds.includes(emp.employeeId);
+            return emp;
+        });
+        
+        return res.json(mappedRoster);
+    } catch(err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/attendance/status/:id', async function(req, res) {
     try {
         const id = req.params.id;
         const employee = await Employee.findOne({ employeeId: id });
-        if (!employee) {
-            return res.json({ status: "unregistered" });
-        }
+        if (!employee) return res.json({ status: "unregistered" });
 
         const activeShift = await Attendance.findOne({ employeeId: id, checkOutTime: null });
         if (activeShift) {
@@ -107,17 +120,13 @@ app.get('/api/attendance/status/:id', async function(req, res) {
 
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
-        
         const completedShiftToday = await Attendance.findOne({
             employeeId: id,
             checkInTime: { $gte: startOfToday },
             checkOutTime: { $ne: null }
         });
 
-        if (completedShiftToday) {
-            return res.json({ status: "completed" });
-        }
-
+        if (completedShiftToday) return res.json({ status: "completed" });
         return res.json({ status: "not_checked_in" });
     } catch (err) {
         return res.status(500).json({ error: "Internal core verification system fault." });
@@ -132,33 +141,22 @@ app.post('/api/attendance', async function(req, res) {
         const lon = req.body.lon;
         
         const employee = await Employee.findOne({ employeeId: employeeId });
-        if (!employee) {
-            return res.status(403).json({ success: false, message: "Punch Denied: Profile ID missing from local directory." });
-        }
+        if (!employee) return res.status(403).json({ success: false, message: "Punch Denied: Profile ID missing." });
         
         if (action === 'checkin') {
-            const newShift = new Attendance({
-                employeeId: employeeId,
-                checkInTime: new Date(),
-                latitude: lat,
-                longitude: lon
-            });
+            const newShift = new Attendance({ employeeId: employeeId, checkInTime: new Date(), latitude: lat, longitude: lon });
             await newShift.save();
             return res.json({ success: true, message: "Shift punched and logged successfully." });
         } 
         
         if (action === 'checkout') {
             const activeShift = await Attendance.findOne({ employeeId: employeeId, checkOutTime: null });
-            if (!activeShift) {
-                return res.json({ success: false, message: "No active workspace session found for this ID." });
-            }
-            
+            if (!activeShift) return res.json({ success: false, message: "No active session located." });
             activeShift.checkOutTime = new Date();
             await activeShift.save();
-            return res.json({ success: true, message: "Shift finalized. Workspace log stored safely." });
+            return res.json({ success: true, message: "Shift finalized." });
         }
-
-        return res.status(400).json({ success: false, message: "Invalid system transactional signature." });
+        return res.status(400).json({ success: false, message: "Invalid transactional signature." });
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
@@ -168,11 +166,8 @@ app.post('/api/absence-report', async function(req, res) {
     try {
         const employeeId = req.body.employeeId;
         const reason = req.body.reason;
-        
         const employee = await Employee.findOne({ employeeId: employeeId });
-        if (!employee) {
-            return res.json({ success: false, message: "Ticket Denied: Assignment ID not recognized." });
-        }
+        if (!employee) return res.json({ success: false, message: "Ticket Denied: ID not recognized." });
 
         const newTicket = new Absence({ employeeId: employeeId, reason: reason });
         await newTicket.save();
@@ -186,15 +181,13 @@ app.delete('/api/employees/:employeeId', async function(req, res) {
     try {
         const id = req.params.employeeId;
         const targetProfile = await Employee.findOne({ employeeId: id });
-        if (!targetProfile) {
-            return res.json({ success: false, message: "Operation Aborted: Profile ID not located inside directory." });
-        }
+        if (!targetProfile) return res.json({ success: false, message: "Operation Aborted: Profile ID not located." });
 
         await Employee.deleteOne({ employeeId: id });
         await Attendance.deleteMany({ employeeId: id, checkOutTime: null });
         return res.json({ success: true, message: `Profile execution complete.` });
     } catch (err) {
-        return res.status(500).json({ success: false, message: "Administrative override terminal network failure." });
+        return res.status(500).json({ success: false, message: "Administrative override terminal failure." });
     }
 });
 
@@ -211,44 +204,33 @@ app.get('/api/notice', async function(req, res) {
     }
 });
 
+app.post('/api/notice', async function(req, res) {
+    try {
+        const incomingText = req.body.notice;
+        let currentNotice = await Notice.findOne();
+        if (!currentNotice) currentNotice = new Notice();
+        currentNotice.notice = incomingText;
+        await currentNotice.save();
+        return res.json({ success: true });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // ==========================================
 // DEDICATED SEPARATE PAGE ROUTING ENGINE
 // ==========================================
 
-// 1. ROUTE FOR WORKERS PORTAL (index.html)
 app.get('/', function(req, res) {
-    const mainPaths = [
-        path.join(__dirname, 'public', 'index.html'),
-        path.join(__dirname, 'index.html')
-    ];
-    for (let p of mainPaths) {
-        if (fs.existsSync(p)) return res.sendFile(p);
-    }
-    res.status(404).send("Error: index.html could not be located in your folders.");
+    const mainPaths = [path.join(__dirname, 'public', 'index.html'), path.join(__dirname, 'index.html')];
+    for (let p of mainPaths) { if (fs.existsSync(p)) return res.sendFile(p); }
+    res.status(404).send("Error: index.html missing.");
 });
 
-// 2. ROUTE FOR SEPARATE ADMIN PORTAL (admin.html)
 app.get('/admin.html', function(req, res) {
-    const adminPaths = [
-        path.join(__dirname, 'public', 'admin.html'),
-        path.join(__dirname, 'admin.html')
-    ];
-    for (let p of adminPaths) {
-        if (fs.existsSync(p)) return res.sendFile(p);
-    }
-    res.status(404).send("Error: admin.html could not be found. Make sure it is saved inside your 'public' folder next to index.html!");
-});
-
-// 3. Short URL Helper (So typing /admin works too)
-app.get('/admin', function(req, res) {
-    const adminPaths = [
-        path.join(__dirname, 'public', 'admin.html'),
-        path.join(__dirname, 'admin.html')
-    ];
-    for (let p of adminPaths) {
-        if (fs.existsSync(p)) return res.sendFile(p);
-    }
-    res.status(404).send("Error: admin.html is missing from your project folders.");
+    const adminPaths = [path.join(__dirname, 'public', 'admin.html'), path.join(__dirname, 'admin.html')];
+    for (let p of adminPaths) { if (fs.existsSync(p)) return res.sendFile(p); }
+    res.status(404).send("Error: admin.html missing from public folder.");
 });
 
 app.listen(PORT, function() {

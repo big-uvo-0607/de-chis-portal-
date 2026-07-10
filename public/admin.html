@@ -3,111 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DE CHIS STORES - Management Admin Panel</title>
+    <title>DE CHIS STORES - Management Command Center</title>
     <style>
         body { 
             font-family: 'Segoe UI', Arial, sans-serif; 
             margin: 0; 
             padding: 20px; 
-            background-color: #f4f6f9; 
-            color: #333; 
+            /* Light Blue to Light Green Gradient Background */
+            background: linear-gradient(135deg, #e3f2fd 0%, #e8f5e9 100%); 
+            color: #2c3e50;
+            min-height: 100vh;
         }
-        .admin-box { 
-            max-width: 600px; 
-            margin: 40px auto; 
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+        }
+        .header-box {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            border-top: 5px solid #3498db;
+        }
+        h1 { margin: 0; color: #2c3e50; font-size: 28px; letter-spacing: 1px; }
+        h3 { margin: 5px 0 0 0; color: #27ae60; font-weight: 500; font-size: 16px; }
+        
+        .grid-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        @media (min-width: 768px) {
+            .grid-layout { grid-template-columns: 1fr 1fr; }
+            .full-width { grid-column: span 2; }
+        }
+
+        .panel-card { 
             background: white; 
-            padding: 30px; 
-            border-radius: 8px; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+            padding: 25px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+            border-top: 4px solid #3498db;
+            box-sizing: border-box;
         }
-        h1 { 
-            text-align: center; 
-            color: #2c3e50; 
-            margin-bottom: 5px; 
+        .panel-card.success { border-top-color: #2ecc71; }
+        .panel-card.warning { border-top-color: #f1c40f; }
+        .panel-card.danger { border-top-color: #e74c3c; }
+
+        h4 { margin-top: 0; margin-bottom: 15px; font-size: 18px; color: #34495e; display: flex; align-items: center; justify-content: space-between; }
+        
+        input, textarea { 
+            width: 100%; 
+            padding: 12px; 
+            margin: 10px 0 15px 0; 
+            border: 1px solid #dcdde1; 
+            border-radius: 6px; 
+            box-sizing: border-box; 
+            font-size: 15px; 
+            background-color: #fbc53110;
         }
-        h3 { 
-            text-align: center; 
-            color: #7f8c8d; 
-            margin-top: 0; 
-            font-weight: 400; 
-        }
-        .section-card { 
-            background: #f8f9fa; 
-            border-left: 4px solid #3498db; 
-            padding: 15px; 
-            margin: 20px 0; 
-            border-radius: 4px; 
-        }
-        .section-card.danger { 
-            border-left-color: #e74c3c; 
-        }
+        input:focus { border-color: #3498db; outline: none; }
+
         .btn { 
             background: #3498db; 
             color: white; 
             border: none; 
             padding: 12px 20px; 
-            border-radius: 4px; 
+            border-radius: 6px; 
             cursor: pointer; 
             width: 100%; 
-            font-size: 16px; 
-            font-weight: bold; 
-        }
-        .btn:hover { 
-            background: #2980b9; 
-        }
-        .btn-danger { 
-            background: #e74c3c; 
-        }
-        .btn-danger:hover { 
-            background: #c0392b; 
-        }
-        input { 
-            width: 100%; 
-            padding: 12px; 
-            margin: 15px 0; 
-            border: 1px solid #ccc; 
-            border-radius: 4px; 
-            box-sizing: border-box; 
             font-size: 15px; 
+            font-weight: 600; 
+            transition: background 0.2s;
         }
-        .count-display { 
-            font-size: 24px; 
-            font-weight: bold; 
-            color: #2c3e50; 
-            text-align: center; 
-            margin: 10px 0; 
+        .btn:hover { background: #2980b9; }
+        .btn-success { background: #2ecc71; }
+        .btn-success:hover { background: #27ae60; }
+        .btn-warning { background: #f1c40f; color: #2c3e50; }
+        .btn-warning:hover { background: #f39c12; }
+        .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
+
+        /* Active Directory Table Panel Styling */
+        .table-wrapper {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 14px;
+        }
+        th { background: #f5f6fa; padding: 12px; font-weight: 600; color: #718093; border-bottom: 2px solid #e1e8ed; }
+        td { padding: 12px; border-bottom: 1px solid #f5f6fa; color: #353b48; }
+        tr:last-child td { border-bottom: none; }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: bold;
+            background: #f1f2f6;
+            color: #57606f;
+            display: inline-block;
+        }
+        .status-badge.active { background: #d4edda; color: #155724; }
+
+        .count-hero {
+            font-size: 36px;
+            font-weight: bold;
+            color: #2c3e50;
+            text-align: center;
+            margin: 10px 0;
         }
     </style>
 </head>
 <body>
 
-    <div class="admin-box">
-        <h1>DE CHIS STORES</h1>
-        <h3>Management Control Center</h3>
-        <hr>
-
-        <div class="section-card">
-            <h4>Live Attendance Monitor</h4>
-            <div class="count-display" id="activeCount">0</div>
-            <p style="text-align:center; margin:0; color:#7f8c8d;">Employees currently clocked into shifts</p>
-            <button class="btn" style="margin-top: 15px;" onclick="refreshActiveCount()">Refresh Database Count</button>
+    <div class="container">
+        <!-- Main Application Header -->
+        <div class="header-box">
+            <h1>DE CHIS STORES</h1>
+            <h3>Live Management Control Suite</h3>
         </div>
 
-        <div class="section-card danger">
-            <h4>Remove Employee Profile</h4>
-            <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 5px;">Input the unique Employee ID to scrub their profile information and clear any running active shifts.</p>
-            <input type="text" id="targetEmployeeId" placeholder="Enter Employee ID (e.g., EMP001)">
-            <button class="btn btn-danger" onclick="executeProfileRemoval()">Delete Profile From System</button>
+        <div class="grid-layout">
+            <!-- Attendance Metric Card -->
+            <div class="panel-card success">
+                <h4>Live Attendance Monitor <span style="font-size:12px; color:#7f8c8d;">Real-time</span></h4>
+                <div class="count-hero" id="activeCount">0</div>
+                <p style="text-align:center; margin:0 0 15px 0; color:#7f8c8d; font-size:14px;">Employees currently active on shifts</p>
+                <button class="btn btn-success" onclick="refreshDashboardData()">Refresh Live Metrics</button>
+            </div>
+
+            <!-- Broadcast Announcement Panel -->
+            <div class="panel-card warning">
+                <h4>Broadcast System Announcement</h4>
+                <p style="font-size: 13px; color: #7f8c8d; margin:0;">Push an update to the workers' marquee scrolling text ticker block.</p>
+                <input type="text" id="newNoticeText" placeholder="Enter message (e.g., Sunday shifts start by 8:00 AM!)">
+                <button class="btn btn-warning" onclick="executeNoticeBroadcast()">Publish Live Announcement</button>
+            </div>
+
+            <!-- Active Registered Employees Directory Panel -->
+            <div class="panel-card full-width">
+                <h4>Active Directory & Staff Register</h4>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Employee ID</th>
+                                <th>Staff Name</th>
+                                <th>Shift Standard</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="employeeTableBody">
+                            <tr>
+                                <td colspan="4" style="text-align:center; color:#7f8c8d;">Loading system registry file...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Management Exclusion Panel -->
+            <div class="panel-card danger full-width">
+                <h4>Remove Employee Profile From Directory</h4>
+                <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 5px;">Input the profile ID code to fully remove an employee record from the running cluster directory.</p>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="targetEmployeeId" placeholder="Enter Employee ID (e.g., EMP001)" style="margin:0;">
+                    <button class="btn btn-danger" style="width: auto; white-space: nowrap; padding: 12px 25px;" onclick="executeProfileRemoval()">Delete Profile</button>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        // Run monitoring scanner immediately when page mounts
+        // Mount auto-fetch immediately upon initialization
         window.onload = function() {
-            refreshActiveCount();
+            refreshDashboardData();
         };
 
-        // Live Active Workers Counter Connection
+        async function refreshDashboardData() {
+            await refreshActiveCount();
+            await populateEmployeeTable();
+        }
+
         async function refreshActiveCount() {
             try {
                 const response = await fetch('/api/attendance/active-count');
@@ -115,41 +202,87 @@
                 document.getElementById('activeCount').innerText = data.count;
             } catch (err) {
                 document.getElementById('activeCount').innerText = "—";
-                console.error("Counter stream tracking connection failed:", err);
             }
         }
 
-        // Target Profile Directory Removal Hook
-        async function executeProfileRemoval() {
-            const employeeId = document.getElementById('targetEmployeeId').value.trim();
-            
-            if (!employeeId) {
-                alert("Action Blocked: Please provide a valid Employee ID.");
+        // Pulls all registered employees to populate your visual staff roster panel
+        async function populateEmployeeTable() {
+            try {
+                const response = await fetch('/api/management/employees');
+                const employees = await response.json();
+                
+                const tableBody = document.getElementById('employeeTableBody');
+                tableBody.innerHTML = '';
+
+                if(employees.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#7f8c8d;">No registered profiles inside the cluster.</td></tr>`;
+                    return;
+                }
+
+                employees.forEach(emp => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${emp.employeeId}</strong></td>
+                        <td>${emp.name}</td>
+                        <td>${emp.shiftHours || 10} Hours</td>
+                        <td><span class="status-badge ${emp.hasActiveShift ? 'active' : ''}">${emp.hasActiveShift ? 'Clocked In' : 'Off Duty'}</span></td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+            } catch (err) {
+                document.getElementById('employeeTableBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:#e74c3c;">Registry channel tracking failure.</td></tr>`;
+            }
+        }
+
+        async function executeNoticeBroadcast() {
+            const noticeText = document.getElementById('newNoticeText').value.trim();
+            if (!noticeText) {
+                alert("Action Refused: Announcement target cannot be blank.");
                 return;
             }
 
-            const confirmation = confirm("System Override Warning:\nAre you absolutely sure you want to remove " + employeeId + " from the database? This will permanently erase their current workspace registration record.");
-            
+            try {
+                const response = await fetch('/api/notice', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notice: noticeText })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert("System Broadcast: Ticker announcement pushed live successfully!");
+                    document.getElementById('newNoticeText').value = "";
+                } else {
+                    alert("System Error: " + data.message);
+                }
+            } catch (err) {
+                alert("Network Exception: Could not broadcast data frame.");
+            }
+        }
+
+        async function executeProfileRemoval() {
+            const employeeId = document.getElementById('targetEmployeeId').value.trim();
+            if (!employeeId) {
+                alert("Action Blocked: Please enter an explicit Employee ID target.");
+                return;
+            }
+
+            const confirmation = confirm("System Directory Deletion Warning:\nAre you entirely certain you want to purge profile " + employeeId + "? This clears their permanent clock files.");
             if (!confirmation) return;
 
             try {
-                const response = await fetch('/api/employees/' + employeeId, {
-                    method: 'DELETE'
-                });
+                const response = await fetch('/api/employees/' + employeeId, { method: 'DELETE' });
                 const data = await response.json();
-                
                 if (data.success) {
-                    alert("System Notice: Profile data for " + employeeId + " has been successfully dropped from the server directory.");
+                    alert("Success: Profile completely cleared from cloud directory.");
                     document.getElementById('targetEmployeeId').value = "";
-                    refreshActiveCount();
+                    refreshDashboardData();
                 } else {
-                    alert("System Exception: " + data.message);
+                    alert("Error: " + data.message);
                 }
             } catch (err) {
-                alert("Network Fault: Connection timed out while communicating with the database core.");
+                alert("Network Fault: Connection terminated.");
             }
         }
     </script>
-
 </body>
 </html>
