@@ -1,299 +1,223 @@
-// DE CHIS STORES - Core Cloud Portal Backend Engine
 const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const path = require('path'); 
-const fs = require('fs'); 
-require('dotenv').config();
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname)); 
-app.use(express.static(path.join(__dirname, 'public')));
 
-// ==========================================
-// MONGODB ATLAS SCHEMAS & CONFIGURATIONS
-// ==========================================
+// ========================================================
+// 1. SYSTEM CONFIGURATION (SECURITY PERIMETERS)
+// ========================================================
+// Exact GPS coordinates for DE CHIS STORES
+const STORE_COORDS = { lat: 9.852923, lon: 8.852990}; 
 
-const employeeSchema = new mongoose.Schema({
-    employeeId: { type: String, required: true, unique: true },
-    name: { type: String, required: true },
-    shiftHours: { type: Number, default: 10 } 
-});
+// Allowed radius around the supermarket (in meters)
+const MAX_DISTANCE_METERS = 100; 
 
-const attendanceSchema = new mongoose.Schema({
-    employeeId: { type: String, required: true },
-    checkInTime: { type: Date, required: true },
-    checkOutTime: { type: Date, default: null },
-    latitude: { type: Number, default: 0 },
-    longitude: { type: Number, default: 0 }
-});
-
-const absenceSchema = new mongoose.Schema({
-    employeeId: { type: String, required: true },
-    reason: { type: String, required: true },
-    filedAt: { type: Date, default: Date.now }
-});
-
-const noticeSchema = new mongoose.Schema({
-    notice: { type: String, default: "Welcome to DE Chis Stores Portal!" }
-});
-
-const Employee = mongoose.model('Employee', employeeSchema);
-const Attendance = mongoose.model('Attendance', attendanceSchema);
-const Absence = mongoose.model('Absence', absenceSchema);
-const Notice = mongoose.model('Notice', noticeSchema);
-
-// Seeds fallback accounts if database is empty on initialization
-async function runSystemSeedingEngine() {
-    try {
-        const checkSeed = await Employee.findOne({ employeeId: "EMP001" });
-        if (!checkSeed) {
-            await Employee.create({ employeeId: "EMP001", name: "Chisom", shiftHours: 10 });
-            await Employee.create({ employeeId: "EMP002", name: "John", shiftHours: 10 });
-            await Employee.create({ employeeId: "EMP003", name: "Blessing", shiftHours: 10 });
-            console.log("🌱 [SEED ENGINE]: Roster profiles mapped and synchronized.");
-        }
-    } catch (err) {
-        console.error("❌ Seed core generation delayed:", err.message);
+// ========================================================
+// 2. SIMULATED DATABASE (EMPLOYEES WITH CUSTOM SHIFTS)
+// ========================================================
+let employees = {
+    // John must check in before 8:05 AM
+    "EMP001": { 
+        id: "EMP001", 
+        name: "John Doe", 
+        role: "Floor Manager", 
+        shiftHours: 9, 
+        cutoffHour: 8, 
+        cutoffMinute: 5 
+    },
+    // Jane is on the afternoon shift, must check in before 3:00 PM (15:00)
+    "EMP002": { 
+        id: "EMP002", 
+        name: "Jane Smith", 
+        role: "Cashier", 
+        shiftHours: 8, 
+        cutoffHour: 15, 
+        cutoffMinute: 0 
+    },
+    // Blessing must check in before 8:05 AM
+    "EMP003": { 
+        id: "EMP003", 
+        name: "Blessing Okafor", 
+        role: "Inventory Supervisor", 
+        shiftHours: 10, 
+        cutoffHour: 8, 
+        cutoffMinute: 5 
     }
+};
+
+let attendanceLog = {}; 
+let systemNotice = "Welcome to DE CHIS STORES Portal! Please check in according to your designated shift schedule.";
+
+// ========================================================
+// 3. SECURE VALIDATION ENGINES
+// ========================================================
+
+/**
+ * Haversine Formula: Calculates absolute distance between 
+ * the employee and the store in meters.
+ */
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; 
+    const phi1 = lat1 * Math.PI / 180;
+    const phi2 = lat2 * Math.PI / 180;
+    const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+    const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+              Math.cos(phi1) * Math.cos(phi2) *
+              Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; 
 }
 
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/de_chis_stores')
-    .then(function() {
-        console.log('🚀 Connected to DE CHIS STORES Live MongoDB Production Cluster');
-        runSystemSeedingEngine();
-    })
-    .catch(function(err) {
-        console.error('❌ Connection Failure in MongoDB Engine:', err);
+/**
+ * Compares current time against a SPECIFIC employee's shift cutoff target
+ */
+function isPastEmployeeCutoff(employee) {
+    const now = new Date();
+    
+    // Convert everything to total minutes from midnight for bulletproof math
+    const currentTotalMinutes = (now.getHours() * 60) + now.getMinutes();
+    const cutoffTotalMinutes = (employee.cutoffHour * 60) + employee.cutoffMinute;
+
+    return currentTotalMinutes >= cutoffTotalMinutes;
+}
+
+// ========================================================
+// 4. API ROUTERS / ENDPOINTS
+// ========================================================
+
+app.get('/api/notice', (req, res) => {
+    res.json({ notice: systemNotice });
+});
+
+app.get('/api/attendance/active-count', (req, res) => {
+    const count = Object.values(attendanceLog).filter(log => log.status === 'checked_in').length;
+    res.json({ count });
+});
+
+app.get('/api/attendance/status/:id', (req, res) => {
+    const id = req.params.id.toUpperCase();
+    
+    if (!employees[id]) {
+        return res.json({ status: "unregistered" });
+    }
+
+    const currentLog = attendanceLog[id];
+    if (!currentLog) {
+        return res.json({ status: "not_checked_in" });
+    }
+
+    // Auto-expire ghost sessions if someone views their profile after their specific shift cutoff time
+    if (currentLog.status === 'checked_in' && isPastEmployeeCutoff(employees[id])) {
+        attendanceLog[id].status = 'completed';
+        return res.json({ status: "completed" });
+    }
+
+    res.json({
+        status: currentLog.status,
+        name: employees[id].name,
+        checkInTime: currentLog.checkInTimeFormatted,
+        shiftHours: employees[id].shiftHours
     });
-
-// ==========================================
-// ADMIN DASHBOARD CORE PIPELINE ENDPOINTS
-// ==========================================
-
-// GET: Aggregates stats, formatting streams to match your precise table rows
-app.get('/api/admin/data', async function(req, res) {
-    try {
-        const employees = await Employee.find().lean();
-        const attendance = await Attendance.find().sort({ checkInTime: -1 }).lean();
-        const absences = await Absence.find().sort({ filedAt: -1 }).lean();
-        const currentNoticeDoc = await Notice.findOne();
-        const currentNoticeText = currentNoticeDoc ? currentNoticeDoc.notice : "Welcome to DE Chis Stores Portal!";
-
-        // 1. Map to match: e.id, e.name
-        const employeeList = employees.map(e => ({
-            id: e.employeeId,
-            name: e.name
-        }));
-
-        // Dictionary to perform high-speed lookups for table joints
-        const empMap = {};
-        employees.forEach(e => {
-            empMap[e.employeeId] = { name: e.name, requiredHours: e.shiftHours || 10 };
-        });
-
-        // 2. Map to match: l.date, l.id, l.name, l.checkIn, l.checkOut, l.hoursWorked, l.flagged
-        const logs = attendance.map(l => {
-            const empInfo = empMap[l.employeeId] || { name: "Unknown Worker", requiredHours: 10 };
-            const checkInDate = new Date(l.checkInTime);
-            
-            // Adjust to display clean local strings
-            const dateStr = checkInDate.toISOString().split('T')[0];
-            const checkInStr = checkInDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
-            let checkOutStr = null;
-            let hoursWorked = null;
-            let flagged = false;
-
-            if (l.checkOutTime) {
-                const checkOutDate = new Date(l.checkOutTime);
-                checkOutStr = checkOutDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                hoursWorked = ((checkOutDate - checkInDate) / (1000 * 60 * 60)).toFixed(2);
-                
-                // Flag rule engine if worker logs out earlier than assigned shift configuration
-                if (parseFloat(hoursWorked) < empInfo.requiredHours) {
-                    flagged = true;
-                }
-            }
-
-            return {
-                date: dateStr,
-                id: l.employeeId,
-                name: empInfo.name,
-                checkIn: checkInStr,
-                checkOut: checkOutStr,
-                hoursWorked: hoursWorked,
-                flagged: flagged
-            };
-        });
-
-        // 3. Map to match: a.date, a.id, a.name, a.reason, a.submittedAt
-        const absenceReports = absences.map(a => {
-            const empInfo = empMap[a.employeeId] || { name: "Unknown Worker" };
-            const filedDate = new Date(a.filedAt);
-            return {
-                date: filedDate.toISOString().split('T')[0],
-                id: a.employeeId,
-                name: empInfo.name,
-                reason: a.reason,
-                submittedAt: filedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-        });
-
-        // Formatted package object sent down the line to client
-        return res.json({
-            employeeList: employeeList,
-            logs: logs,
-            absenceReports: absenceReports,
-            currentNotice: currentNoticeText
-        });
-    } catch (err) {
-        return res.status(500).json({ error: err.message });
-    }
 });
 
-// POST: Handles worker submission from dashboard
-app.post('/api/admin/register', async function(req, res) {
-    try {
-        const { id, name, requiredHours } = req.body;
-        if (!id || !name) {
-            return res.status(400).json({ success: false, message: "Error: Parameters are completely empty!" });
+// MAIN SHIFT SIGNATURE HANDLER
+app.post('/api/attendance', (req, res) => {
+    const { employeeId, action, lat, lon, deviceId } = req.body;
+    const id = employeeId.toUpperCase();
+
+    if (!employees[id]) {
+        return res.status(400).json({ success: false, message: "Profile identification failed. ID unregistered." });
+    }
+
+    const currentWorker = employees[id]; // Target the specific employee's data
+
+    // Verification Layer 1: Geolocation Bounds
+    if (!lat || !lon) {
+        return res.status(400).json({ success: false, message: "Access Denied: Device GPS signal missing." });
+    }
+    const distance = calculateDistance(lat, lon, STORE_COORDS.lat, STORE_COORDS.lon);
+    if (distance > MAX_DISTANCE_METERS) {
+        return res.status(403).json({ 
+            success: false, 
+            message: `Verification Failed: You are outside store boundaries (${Math.round(distance)}m away).` 
+        });
+    }
+
+    // Verification Layer 2: Individual Clock Cutoff Enforcement
+    if (action === 'checkin' && isPastEmployeeCutoff(currentWorker)) {
+        // Formats the specific worker's cutoff cleanly (e.g., "08:05" or "15:00")
+        const formattedCutoff = `${String(currentWorker.cutoffHour).padStart(2, '0')}:${String(currentWorker.cutoffMinute).padStart(2, '0')}`;
+        return res.status(403).json({ 
+            success: false, 
+            message: `Access Refused: You are late! Your shift check-in window closed at ${formattedCutoff}.` 
+        });
+    }
+
+    // Verification Layer 3: Anti-Buddy Punching Device Lockout
+    if (action === 'checkin') {
+        if (!deviceId) {
+            return res.status(400).json({ success: false, message: "Security Error: Device fingerprint missing." });
         }
 
-        const existing = await Employee.findOne({ employeeId: id });
-        if (existing) {
-            return res.status(400).json({ success: false, message: "Database Warning: Employee ID signature already assigned!" });
-        }
+        const fraudDeviceMatch = Object.keys(attendanceLog).find(
+            empId => attendanceLog[empId].deviceId === deviceId && empId !== id
+        );
 
-        await Employee.create({
-            employeeId: id,
-            name: name,
-            shiftHours: requiredHours ? parseFloat(requiredHours) : 10
-        });
-
-        return res.json({ success: true, message: "System Log: Employee added to roster index files successfully!" });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
-});
-
-// POST: Overwrites announcement record state strings
-app.post('/api/admin/notice', async function(req, res) {
-    try {
-        const { notice } = req.body;
-        let currentNotice = await Notice.findOne();
-        if (!currentNotice) {
-            currentNotice = new Notice();
-        }
-        currentNotice.notice = notice;
-        await currentNotice.save();
-        return res.json({ success: true, message: "Notice broadcast configurations synced globally!" });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
-});
-
-// ==========================================
-// WORKERS APPLICATION UTILITY ENDPOINTS
-// ==========================================
-
-app.get('/api/notice', async function(req, res) {
-    try {
-        let currentNotice = await Notice.findOne();
-        return res.json({ notice: currentNotice ? currentNotice.notice : "Welcome to DE Chis Stores Portal!" });
-    } catch (err) {
-        return res.json({ notice: "Welcome to DE Chis Stores Portal!" });
-    }
-});
-
-app.get('/api/attendance/status/:id', async function(req, res) {
-    try {
-        const id = req.params.id;
-        const employee = await Employee.findOne({ employeeId: id });
-        if (!employee) return res.json({ status: "unregistered" });
-
-        const activeShift = await Attendance.findOne({ employeeId: id, checkOutTime: null });
-        if (activeShift) {
-            return res.json({
-                status: "checked_in",
-                name: employee.name,
-                checkInTime: new Date(activeShift.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                checkInTimeRaw: activeShift.checkInTime, 
-                shiftHours: employee.shiftHours || 10   
+        if (fraudDeviceMatch) {
+            return res.status(403).json({ 
+                success: false, 
+                message: "Fraud Protection: This device has already been used to check in another employee today." 
             });
         }
-
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        const completedShiftToday = await Attendance.findOne({
-            employeeId: id,
-            checkInTime: { $gte: startOfToday },
-            checkOutTime: { $ne: null }
-        });
-
-        if (completedShiftToday) return res.json({ status: "completed" });
-        return res.json({ status: "not_checked_in" });
-    } catch (err) {
-        return res.status(500).json({ error: "Verification processing error." });
     }
-});
 
-app.post('/api/attendance', async function(req, res) {
-    try {
-        const { employeeId, action, lat, lon } = req.body;
-        const employee = await Employee.findOne({ employeeId: employeeId });
-        if (!employee) return res.status(403).json({ success: false, message: "Punch Denied: Profile ID missing." });
+    const now = new Date();
+
+    if (action === 'checkin') {
+        attendanceLog[id] = {
+            status: 'checked_in',
+            deviceId: deviceId, 
+            checkInTimeRaw: now.toISOString(),
+            checkInTimeFormatted: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        return res.json({ success: true, message: `Welcome on shift, ${currentWorker.name}. Session secured.` });
         
-        if (action === 'checkin') {
-            const newShift = new Attendance({ employeeId: employeeId, checkInTime: new Date(), latitude: lat, longitude: lon });
-            await newShift.save();
-            return res.json({ success: true, message: "Shift punched and logged successfully." });
-        } 
-        
-        if (action === 'checkout') {
-            const activeShift = await Attendance.findOne({ employeeId: employeeId, checkOutTime: null });
-            if (!activeShift) return res.json({ success: false, message: "No active session located." });
-            activeShift.checkOutTime = new Date();
-            await activeShift.save();
-            return res.json({ success: true, message: "Shift finalized." });
+    } else if (action === 'checkout') {
+        if (!attendanceLog[id] || attendanceLog[id].status !== 'checked_in') {
+            return res.status(400).json({ success: false, message: "Error: No active open session found for this profile." });
         }
-        return res.status(400).json({ success: false, message: "Invalid transactional signature." });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
+        
+        attendanceLog[id].status = 'completed';
+        attendanceLog[id].checkOutTimeRaw = now.toISOString();
+        return res.json({ success: true, message: "Shift finalized. Have a safe trip home!" });
     }
+
+    res.status(400).json({ success: false, message: "System operational anomaly." });
 });
 
-app.post('/api/absence-report', async function(req, res) {
-    try {
-        const { employeeId, reason } = req.body;
-        const employee = await Employee.findOne({ employeeId: employeeId });
-        if (!employee) return res.json({ success: false, message: "Ticket Denied: ID not recognized." });
-
-        const newTicket = new Absence({ employeeId: employeeId, reason: reason });
-        await newTicket.save();
-        return res.json({ success: true, message: "Absence Ticket routed smoothly." });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: "Database transmission delay." });
+app.delete('/api/employees/:id', (req, res) => {
+    const id = req.params.id.toUpperCase();
+    if (employees[id]) {
+        delete employees[id];
+        delete attendanceLog[id]; 
+        return res.json({ success: true, message: "Profile record completely dropped." });
     }
+    res.status(404).json({ success: false, message: "Target ID not found." });
 });
 
-// Catch-all route definitions to handle clean standalone page decoupling
-app.get('/', function(req, res) {
-    const mainPaths = [path.join(__dirname, 'public', 'index.html'), path.join(__dirname, 'index.html')];
-    for (let p of mainPaths) { if (fs.existsSync(p)) return res.sendFile(p); }
-    res.status(404).send("Error: index.html missing from public directory.");
+app.post('/api/absence-report', (req, res) => {
+    const { employeeId, reason } = req.body;
+    const id = employeeId.toUpperCase();
+    if (!employees[id]) return res.status(400).json({ success: false, message: "ID unregistered." });
+    
+    console.log(`[ABSENCE INCIDENT] Employee: ${id} - Reason: ${reason}`);
+    res.json({ success: true, message: "Absence ticket filed directly into management console." });
 });
 
-app.get('/admin.html', function(req, res) {
-    const adminPaths = [path.join(__dirname, 'public', 'admin.html'), path.join(__dirname, 'admin.html')];
-    for (let p of adminPaths) { if (fs.existsSync(p)) return res.sendFile(p); }
-    res.status(404).send("Error: admin.html layout template missing.");
-});
-
-app.listen(PORT, function() {
-    console.log(`📡 DE CHIS Operational Grid Core broadcast active on port: ${PORT}`);
+app.listen(PORT, () => {
+    console.log(`[DE CHIS STORES PORTAL ACTIVE WITH CUSTOM SHIFT LOCKS ON PORT ${PORT}]`);
 });
