@@ -6,9 +6,24 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 
 // ========================================================
-// FRONTEND STATIC ROUTER FIX (Bulletproof for Render)
+// DIRECT EXPLICIT ROUTING FIX (Forces Render to send files)
 // ========================================================
-// This explicitly instructs the Linux container to serve your HTML files
+// This handles loading the homepage panel
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// This handles loading your index.html directly
+app.get('/index.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// This explicitly catches the admin.html request and sends the file
+app.get('/admin.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+// Backup static assets provider for CSS/JS files sitting in root
 app.use(express.static(path.join(__dirname)));
 
 // ========================================================
