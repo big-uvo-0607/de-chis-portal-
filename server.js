@@ -47,17 +47,13 @@ app.use(express.static(path.join(__dirname)));
 // ========================================================
 // 1. SYSTEM CONFIGURATION (SECURITY PERIMETERS)
 // ========================================================
-// Exact GPS coordinates for DE CHIS STORES
-const STORE_COORDS = { lat: 9.852923, lon: 8.852990}; 
-
-// Allowed radius around the supermarket (in meters)
+const STORE_COORDS = { lat: 9.852923, lon: 8.852990 }; 
 const MAX_DISTANCE_METERS = 100; 
 
 // ========================================================
 // 2. SIMULATED DATABASE (EMPLOYEES WITH CUSTOM SHIFTS)
 // ========================================================
 let employees = {
-    // John must check in before 8:05 AM
     "EMP001": { 
         id: "EMP001", 
         name: "John Doe", 
@@ -66,7 +62,6 @@ let employees = {
         cutoffHour: 8, 
         cutoffMinute: 5 
     },
-    // Jane is on the afternoon shift, must check in before 3:00 PM (15:00)
     "EMP002": { 
         id: "EMP002", 
         name: "Jane Smith", 
@@ -75,7 +70,6 @@ let employees = {
         cutoffHour: 15, 
         cutoffMinute: 0 
     },
-    // Blessing must check in before 8:05 AM
     "EMP003": { 
         id: "EMP003", 
         name: "Blessing Okafor", 
@@ -92,11 +86,6 @@ let systemNotice = "Welcome to DE CHIS STORES Portal! Please check in according 
 // ========================================================
 // 3. SECURE VALIDATION ENGINES
 // ========================================================
-
-/**
- * Haversine Formula: Calculates absolute distance between 
- * the employee and the store in meters.
- */
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3; 
     const phi1 = lat1 * Math.PI / 180;
@@ -112,13 +101,8 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c; 
 }
 
-/**
- * Compares current time against a SPECIFIC employee's shift cutoff target
- */
 function isPastEmployeeCutoff(employee) {
     const now = new Date();
-    
-    // Convert everything to total minutes from midnight for bulletproof math
     const currentTotalMinutes = (now.getHours() * 60) + now.getMinutes();
     const cutoffTotalMinutes = (employee.cutoffHour * 60) + employee.cutoffMinute;
 
@@ -128,7 +112,6 @@ function isPastEmployeeCutoff(employee) {
 // ========================================================
 // 4. API ROUTERS / ENDPOINTS
 // ========================================================
-
 app.get('/api/notice', (req, res) => {
     res.json({ notice: systemNotice });
 });
@@ -150,7 +133,6 @@ app.get('/api/attendance/status/:id', (req, res) => {
         return res.json({ status: "not_checked_in" });
     }
 
-    // Auto-expire ghost sessions if someone views their profile after their specific shift cutoff time
     if (currentLog.status === 'checked_in' && isPastEmployeeCutoff(employees[id])) {
         attendanceLog[id].status = 'completed';
         return res.json({ status: "completed" });
@@ -164,7 +146,6 @@ app.get('/api/attendance/status/:id', (req, res) => {
     });
 });
 
-// MAIN SHIFT SIGNATURE HANDLER
 app.post('/api/attendance', (req, res) => {
     const { employeeId, action, lat, lon, deviceId } = req.body;
     const id = employeeId.toUpperCase();
@@ -173,9 +154,8 @@ app.post('/api/attendance', (req, res) => {
         return res.status(400).json({ success: false, message: "Profile identification failed. ID unregistered." });
     }
 
-    const currentWorker = employees[id]; // Target the specific employee's data
+    const currentWorker = employees[id];
 
-    // Verification Layer 1: Geolocation Bounds
     if (!lat || !lon) {
         return res.status(400).json({ success: false, message: "Access Denied: Device GPS signal missing." });
     }
@@ -187,9 +167,7 @@ app.post('/api/attendance', (req, res) => {
         });
     }
 
-    // Verification Layer 2: Individual Clock Cutoff Enforcement
     if (action === 'checkin' && isPastEmployeeCutoff(currentWorker)) {
-        // Formats the specific worker's cutoff cleanly (e.g., "08:05" or "15:00")
         const formattedCutoff = `${String(currentWorker.cutoffHour).padStart(2, '0')}:${String(currentWorker.cutoffMinute).padStart(2, '0')}`;
         return res.status(403).json({ 
             success: false, 
@@ -197,7 +175,6 @@ app.post('/api/attendance', (req, res) => {
         });
     }
 
-    // Verification Layer 3: Anti-Buddy Punching Device Lockout
     if (action === 'checkin') {
         if (!deviceId) {
             return res.status(400).json({ success: false, message: "Security Error: Device fingerprint missing." });
@@ -249,4 +226,15 @@ app.delete('/api/employees/:id', (req, res) => {
     res.status(404).json({ success: false, message: "Target ID not found." });
 });
 
-app.post('/api/absence-report', (req
+app.post('/api/absence-report', (req, res) => {
+    const { employeeId, reason } = req.body;
+    const id = employeeId.toUpperCase();
+    if (!employees[id]) return res.status(400).json({ success: false, message: "ID unregistered." });
+    
+    console.log(`[ABSENCE INCIDENT] Employee: ${id} - Reason: ${reason}`);
+    res.json({ success: true, message: "Absence ticket filed directly into management console." });
+});
+
+app.listen(PORT, () => {
+    console.log(`[DE CHIS STORES PORTAL ACTIVE WITH CUSTOM SHIFT LOCKS ON PORT ${PORT}]`);
+});
