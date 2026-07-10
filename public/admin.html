@@ -43,7 +43,7 @@
 <div class="container">
     <div class="header-section">
         <h1>DE Chis Stores - System Administration Dashboard</h1>
-        <button class="admin-toggle-btn" onclick="toggleAbsenceLog()">View Absence Reports</button>
+        <button id="toggleAbsenceBtn" class="admin-toggle-btn">View Absence Reports</button>
     </div>
 
     <div class="analytics-grid">
@@ -67,13 +67,13 @@
             <input type="text" id="newId" placeholder="Assign ID (e.g. EMP004)">
             <input type="text" id="newName" placeholder="Full Name">
             <input type="number" id="requiredHours" placeholder="Shift Hours (e.g. 10)">
-            <button onclick="registerEmployee()">Add Employee</button>
+            <button id="registerWorkerBtn">Add Employee</button>
         </div>
 
         <div class="card" style="border-top: 5px solid #2e7d32;">
             <h2>Digital Store Notice Board</h2>
             <textarea id="noticeText" rows="3" placeholder="Type a store-wide announcement here (e.g., Sunday staff meeting by 4:00 PM)..." style="resize: none;"></textarea>
-            <button onclick="submitNotice()" style="background-color: #2e7d32;">Broadcast Announcement</button>
+            <button id="broadcastNoticeBtn" style="background-color: #2e7d32;">Broadcast Announcement</button>
             <p id="activeNoticeBanner" style="font-size: 13px; font-style: italic; margin-top: 8px; color: #444; word-break: break-word;">Active: Loading current notice...</p>
         </div>
 
@@ -114,7 +114,7 @@
 
     function toggleAbsenceLog() {
         const panel = document.getElementById('absenceCardAdmin');
-        const btn = document.querySelector('.admin-toggle-btn');
+        const btn = document.getElementById('toggleAbsenceBtn');
         if (panel.style.display === "block") {
             panel.style.display = "none";
             btn.innerText = "View Absence Reports";
@@ -225,7 +225,6 @@
         }
     }
 
-    // Submit handler sends announcements back to your Node/Express API
     async function submitNotice() {
         const text = document.getElementById('noticeText').value.trim();
         if(!text) return alert("Please enter an announcement notice first!");
@@ -246,8 +245,16 @@
         }
     }
 
-    setInterval(loadDashboardData, 3000);
-    loadDashboardData();
+    // Programmatic native event linkers to bypass production inline scoping issues
+    document.addEventListener("DOMContentLoaded", function() {
+        document.getElementById('toggleAbsenceBtn').addEventListener('click', toggleAbsenceLog);
+        document.getElementById('registerWorkerBtn').addEventListener('click', registerEmployee);
+        document.getElementById('broadcastNoticeBtn').addEventListener('click', submitNotice);
+        
+        // Run initial load cycle
+        loadDashboardData();
+        setInterval(loadDashboardData, 3000);
+    });
 </script>
 </body>
 </html>
