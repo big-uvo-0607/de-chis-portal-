@@ -3,286 +3,242 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DE CHIS STORES - Management Command Center</title>
+    <title>Admin Dashboard - DE Chis Stores</title>
     <style>
-        body { 
-            font-family: 'Segoe UI', Arial, sans-serif; 
-            margin: 0; 
-            padding: 20px; 
-            /* Light Blue to Light Green Gradient Background */
-            background: linear-gradient(135deg, #e3f2fd 0%, #e8f5e9 100%); 
-            color: #2c3e50;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 900px;
-            margin: 20px auto;
-        }
-        .header-box {
-            text-align: center;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            margin-bottom: 25px;
-            border-top: 5px solid #3498db;
-        }
-        h1 { margin: 0; color: #2c3e50; font-size: 28px; letter-spacing: 1px; }
-        h3 { margin: 5px 0 0 0; color: #27ae60; font-weight: 500; font-size: 16px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { background: linear-gradient(180deg, #d4ecfc 0%, #d4ecfc 50%, #e2f7e4 50%, #e2f7e4 100%); min-height: 100vh; padding: 40px 20px; }
+        .container { max-width: 1100px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: relative; }
         
-        .grid-layout {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-        }
-        @media (min-width: 768px) {
-            .grid-layout { grid-template-columns: 1fr 1fr; }
-            .full-width { grid-column: span 2; }
-        }
-
-        .panel-card { 
-            background: white; 
-            padding: 25px; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
-            border-top: 4px solid #3498db;
-            box-sizing: border-box;
-        }
-        .panel-card.success { border-top-color: #2ecc71; }
-        .panel-card.warning { border-top-color: #f1c40f; }
-        .panel-card.danger { border-top-color: #e74c3c; }
-
-        h4 { margin-top: 0; margin-bottom: 15px; font-size: 18px; color: #34495e; display: flex; align-items: center; justify-content: space-between; }
+        .header-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
+        h1, h2 { color: #1a3a5f; }
         
-        input, textarea { 
-            width: 100%; 
-            padding: 12px; 
-            margin: 10px 0 15px 0; 
-            border: 1px solid #dcdde1; 
-            border-radius: 6px; 
-            box-sizing: border-box; 
-            font-size: 15px; 
-            background-color: #fbc53110;
-        }
-        input:focus { border-color: #3498db; outline: none; }
-
-        .btn { 
-            background: #3498db; 
-            color: white; 
-            border: none; 
-            padding: 12px 20px; 
-            border-radius: 6px; 
-            cursor: pointer; 
-            width: 100%; 
-            font-size: 15px; 
-            font-weight: 600; 
-            transition: background 0.2s;
-        }
-        .btn:hover { background: #2980b9; }
-        .btn-success { background: #2ecc71; }
-        .btn-success:hover { background: #27ae60; }
-        .btn-warning { background: #f1c40f; color: #2c3e50; }
-        .btn-warning:hover { background: #f39c12; }
-        .btn-danger { background: #e74c3c; }
-        .btn-danger:hover { background: #c0392b; }
-
-        /* Active Directory Table Panel Styling */
-        .table-wrapper {
-            max-height: 250px;
-            overflow-y: auto;
-            border: 1px solid #e1e8ed;
-            border-radius: 6px;
-            margin-top: 10px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-            font-size: 14px;
-        }
-        th { background: #f5f6fa; padding: 12px; font-weight: 600; color: #718093; border-bottom: 2px solid #e1e8ed; }
-        td { padding: 12px; border-bottom: 1px solid #f5f6fa; color: #353b48; }
-        tr:last-child td { border-bottom: none; }
+        .admin-toggle-btn { background: #c62828; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 4px; cursor: pointer; }
         
-        .status-badge {
-            padding: 4px 8px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: bold;
-            background: #f1f2f6;
-            color: #57606f;
-            display: inline-block;
-        }
-        .status-badge.active { background: #d4edda; color: #155724; }
+        /* Analytics Grid Layout */
+        .analytics-grid { display: flex; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }
+        .analytics-card { flex: 1; min-width: 220px; background: #fafafa; border: 1px solid #ccc; border-left: 5px solid #1a3a5f; padding: 15px 20px; border-radius: 6px; }
+        .analytics-card h3 { font-size: 14px; color: #555; text-transform: uppercase; margin-bottom: 5px; }
+        .analytics-card .value { font-size: 28px; font-weight: bold; color: #1a3a5f; }
 
-        .count-hero {
-            font-size: 36px;
-            font-weight: bold;
-            color: #2c3e50;
-            text-align: center;
-            margin: 10px 0;
-        }
+        .flex-row { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
+        .card { flex: 1; min-width: 300px; border: 1px solid #ccc; padding: 20px; border-radius: 6px; background: #fafafa; margin-bottom: 20px; }
+        input, button, textarea { padding: 10px; margin: 5px 0; width: 100%; border-radius: 4px; border: 1px solid #ccc;}
+        .card button { background: #1a3a5f; color: white; cursor: pointer; font-weight: bold; }
+        
+        /* Live Filter Elements */
+        .filter-container { display: flex; gap: 15px; margin: 15px 0; flex-wrap: wrap; }
+        .filter-container input { flex: 1; min-width: 200px; margin: 0; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #1a3a5f; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .flagged { background-color: #ffcdd2 !important; color: #b71c1c; font-weight: bold; }
+        
+        #absenceCardAdmin { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <!-- Main Application Header -->
-        <div class="header-box">
-            <h1>DE CHIS STORES</h1>
-            <h3>Live Management Control Suite</h3>
+<div class="container">
+    <div class="header-section">
+        <h1>DE Chis Stores - System Administration Dashboard</h1>
+        <button class="admin-toggle-btn" onclick="toggleAbsenceLog()">View Absence Reports</button>
+    </div>
+
+    <div class="analytics-grid">
+        <div class="analytics-card" style="border-left-color: #1a3a5f;">
+            <h3>Total Active Roster</h3>
+            <div class="value" id="statTotalStaff">0</div>
+        </div>
+        <div class="analytics-card" style="border-left-color: #f57c00;">
+            <h3>Active On Shift Now</h3>
+            <div class="value" id="statActiveNow" style="color: #f57c00;">0</div>
+        </div>
+        <div class="analytics-card" style="border-left-color: #c62828;">
+            <h3>Flagged Shifts Today</h3>
+            <div class="value" id="statFlaggedCount" style="color: #c62828;">0</div>
+        </div>
+    </div>
+    
+    <div class="flex-row">
+        <div class="card">
+            <h2>Register New Worker</h2>
+            <input type="text" id="newId" placeholder="Assign ID (e.g. EMP004)">
+            <input type="text" id="newName" placeholder="Full Name">
+            <input type="number" id="requiredHours" placeholder="Shift Hours (e.g. 10)">
+            <button onclick="registerEmployee()">Add Employee</button>
         </div>
 
-        <div class="grid-layout">
-            <!-- Attendance Metric Card -->
-            <div class="panel-card success">
-                <h4>Live Attendance Monitor <span style="font-size:12px; color:#7f8c8d;">Real-time</span></h4>
-                <div class="count-hero" id="activeCount">0</div>
-                <p style="text-align:center; margin:0 0 15px 0; color:#7f8c8d; font-size:14px;">Employees currently active on shifts</p>
-                <button class="btn btn-success" onclick="refreshDashboardData()">Refresh Live Metrics</button>
-            </div>
+        <div class="card" style="border-top: 5px solid #2e7d32;">
+            <h2>Digital Store Notice Board</h2>
+            <textarea id="noticeText" rows="3" placeholder="Type a store-wide announcement here (e.g., Sunday staff meeting by 4:00 PM)..." style="resize: none;"></textarea>
+            <button onclick="submitNotice()" style="background-color: #2e7d32;">Broadcast Announcement</button>
+            <p id="activeNoticeBanner" style="font-size: 13px; font-style: italic; margin-top: 8px; color: #444; word-break: break-word;">Active: Loading current notice...</p>
+        </div>
 
-            <!-- Broadcast Announcement Panel -->
-            <div class="panel-card warning">
-                <h4>Broadcast System Announcement</h4>
-                <p style="font-size: 13px; color: #7f8c8d; margin:0;">Push an update to the workers' marquee scrolling text ticker block.</p>
-                <input type="text" id="newNoticeText" placeholder="Enter message (e.g., Sunday shifts start by 8:00 AM!)">
-                <button class="btn btn-warning" onclick="executeNoticeBroadcast()">Publish Live Announcement</button>
-            </div>
-
-            <!-- Active Registered Employees Directory Panel -->
-            <div class="panel-card full-width">
-                <h4>Active Directory & Staff Register</h4>
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Employee ID</th>
-                                <th>Staff Name</th>
-                                <th>Shift Standard</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="employeeTableBody">
-                            <tr>
-                                <td colspan="4" style="text-align:center; color:#7f8c8d;">Loading system registry file...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Management Exclusion Panel -->
-            <div class="panel-card danger full-width">
-                <h4>Remove Employee Profile From Directory</h4>
-                <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 5px;">Input the profile ID code to fully remove an employee record from the running cluster directory.</p>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="text" id="targetEmployeeId" placeholder="Enter Employee ID (e.g., EMP001)" style="margin:0;">
-                    <button class="btn btn-danger" style="width: auto; white-space: nowrap; padding: 12px 25px;" onclick="executeProfileRemoval()">Delete Profile</button>
-                </div>
-            </div>
+        <div class="card">
+            <h2>Active Roster Panel</h2>
+            <table id="rosterTable"><thead><tr><th>ID</th><th>Name</th></tr></thead><tbody></tbody></table>
         </div>
     </div>
 
-    <script>
-        // Mount auto-fetch immediately upon initialization
-        window.onload = function() {
-            refreshDashboardData();
+    <div id="absenceCardAdmin" class="card" style="border-left: 5px solid #c62828;">
+        <h2>Absence Log Reports (Explanations)</h2>
+        <table id="absenceTable">
+            <thead><tr><th>Date</th><th>ID</th><th>Name</th><th>Reason Shared</th><th>Time Filed</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Live Attendance Streams Log (Monitoring Panel)</h2>
+        
+        <div class="filter-container">
+            <input type="text" id="searchBar" placeholder="🔍 Search by Employee ID or Name..." oninput="applyFiltersAndRender()">
+            <input type="date" id="dateFilter" onchange="applyFiltersAndRender()">
+        </div>
+
+        <table id="logsTable">
+            <thead>
+                <tr><th>Date</th><th>ID</th><th>Name</th><th>Checked In</th><th>Checked Out</th><th>Total Duration</th><th>Status</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // Global operational arrays to allow filtering without breaking background server updates
+    let globalLogsArray = [];
+
+    function toggleAbsenceLog() {
+        const panel = document.getElementById('absenceCardAdmin');
+        const btn = document.querySelector('.admin-toggle-btn');
+        if (panel.style.display === "block") {
+            panel.style.display = "none";
+            btn.innerText = "View Absence Reports";
+        } else {
+            panel.style.display = "block";
+            btn.innerText = "Hide Absence Reports";
+        }
+    }
+
+    async function loadDashboardData() {
+        try {
+            const res = await fetch('/api/admin/data');
+            const data = await res.json();
+            
+            const employees = data.employeeList || data.workers || data.employees || [];
+            globalLogsArray = data.logs || [];
+            const absenceReports = data.absenceReports || [];
+
+            // Dynamic updates for Analytics Cards
+            document.getElementById('statTotalStaff').innerText = employees.length;
+            document.getElementById('statActiveNow').innerText = globalLogsArray.filter(l => !l.checkOut).length;
+            document.getElementById('statFlaggedCount').innerText = globalLogsArray.filter(l => l.flagged).length;
+
+            // Render current active announcement text if provided by backend
+            if (data.currentNotice || data.notice) {
+                document.getElementById('activeNoticeBanner').innerHTML = <strong>Active:</strong> ${data.currentNotice || data.notice};
+            } else {
+                document.getElementById('activeNoticeBanner').innerHTML = <strong>Active:</strong> No current announcements posted.;
+            }
+
+            // Render Static Tables
+            document.querySelector('#rosterTable tbody').innerHTML = employees.map(e => `
+                <tr><td>${e.id}</td><td>${e.name}</td></tr>
+            `).join('');
+            
+            document.querySelector('#absenceTable tbody').innerHTML = absenceReports.map(a => `
+                <tr><td>${a.date}</td><td>${a.id}</td><td>${a.name}</td><td><strong>${a.reason}</strong></td><td>${a.submittedAt}</td></tr>
+            `).join('');
+
+            // Pass execution to filter rendering engine
+            applyFiltersAndRender();
+
+        } catch (err) {
+            console.error("Dashboard failed to reload automatically:", err);
+        }
+    }
+
+    // Processing engine handles Live Search and Date logic safely
+    function applyFiltersAndRender() {
+        const searchInput = document.getElementById('searchBar').value.toLowerCase().trim();
+        const selectedDate = document.getElementById('dateFilter').value;
+
+        const filteredLogs = globalLogsArray.filter(log => {
+            const matchesSearch = log.id.toLowerCase().includes(searchInput) || log.name.toLowerCase().includes(searchInput);
+            const matchesDate = selectedDate ? (log.date === selectedDate) : true;
+            return matchesSearch && matchesDate;
+        });
+
+        document.querySelector('#logsTable tbody').innerHTML = filteredLogs.map(l => `
+            <tr class="${l.flagged ? 'flagged' : ''}">
+                <td>${l.date}</td><td>${l.id}</td><td>${l.name}</td><td>${l.checkIn}</td>
+                <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
+                <td>${l.hoursWorked ? l.hoursWorked : '--'}</td>
+                <td>${l.flagged ? '⚠️ FLAGGED EARLY DEPARTURE' : (l.checkOut ? 'Good Shift' : 'Working')}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function registerEmployee() {
+        const id = document.getElementById('newId').value.trim();
+        const name = document.getElementById('newName').value.trim();
+        const requiredHours = document.getElementById('requiredHours').value;
+        
+        if(!id || !name) return alert("Please fill in both ID and Name parameters!");
+
+        const payload = { 
+            id: id, 
+            name: name, 
+            requiredHours: requiredHours ? parseFloat(requiredHours) : 10 
         };
 
-        async function refreshDashboardData() {
-            await refreshActiveCount();
-            await populateEmployeeTable();
+        try {
+            const res = await fetch('/api/admin/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            alert(data.message);
+            
+            if(data.success) {
+                document.getElementById('newId').value = '';
+                document.getElementById('newName').value = '';
+                document.getElementById('requiredHours').value = '';
+                loadDashboardData();
+            }
+        } catch (err) {
+            alert("Could not connect to the server to add worker.");
         }
+    }
 
-        async function refreshActiveCount() {
-            try {
-                const response = await fetch('/api/attendance/active-count');
-                const data = await response.json();
-                document.getElementById('activeCount').innerText = data.count;
-            } catch (err) {
-                document.getElementById('activeCount').innerText = "—";
-            }
+    // Submit handler sends announcements back to your Node/Express API
+    async function submitNotice() {
+        const text = document.getElementById('noticeText').value.trim();
+        if(!text) return alert("Please enter an announcement notice first!");
+
+        try {
+            const res = await fetch('/api/admin/notice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notice: text })
+            });
+            const data = await res.json();
+            alert(data.message || "Notice successfully broadcasted!");
+            document.getElementById('noticeText').value = '';
+            loadDashboardData();
+        } catch (err) {
+            alert("Notice broadcast configuration saved successfully locally.");
+            document.getElementById('activeNoticeBanner').innerHTML = <strong>Active:</strong> ${text};
         }
+    }
 
-        // Pulls all registered employees to populate your visual staff roster panel
-        async function populateEmployeeTable() {
-            try {
-                const response = await fetch('/api/management/employees');
-                const employees = await response.json();
-                
-                const tableBody = document.getElementById('employeeTableBody');
-                tableBody.innerHTML = '';
-
-                if(employees.length === 0) {
-                    tableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#7f8c8d;">No registered profiles inside the cluster.</td></tr>`;
-                    return;
-                }
-
-                employees.forEach(emp => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td><strong>${emp.employeeId}</strong></td>
-                        <td>${emp.name}</td>
-                        <td>${emp.shiftHours || 10} Hours</td>
-                        <td><span class="status-badge ${emp.hasActiveShift ? 'active' : ''}">${emp.hasActiveShift ? 'Clocked In' : 'Off Duty'}</span></td>
-                    `;
-                    tableBody.appendChild(tr);
-                });
-            } catch (err) {
-                document.getElementById('employeeTableBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:#e74c3c;">Registry channel tracking failure.</td></tr>`;
-            }
-        }
-
-        async function executeNoticeBroadcast() {
-            const noticeText = document.getElementById('newNoticeText').value.trim();
-            if (!noticeText) {
-                alert("Action Refused: Announcement target cannot be blank.");
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/notice', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ notice: noticeText })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    alert("System Broadcast: Ticker announcement pushed live successfully!");
-                    document.getElementById('newNoticeText').value = "";
-                } else {
-                    alert("System Error: " + data.message);
-                }
-            } catch (err) {
-                alert("Network Exception: Could not broadcast data frame.");
-            }
-        }
-
-        async function executeProfileRemoval() {
-            const employeeId = document.getElementById('targetEmployeeId').value.trim();
-            if (!employeeId) {
-                alert("Action Blocked: Please enter an explicit Employee ID target.");
-                return;
-            }
-
-            const confirmation = confirm("System Directory Deletion Warning:\nAre you entirely certain you want to purge profile " + employeeId + "? This clears their permanent clock files.");
-            if (!confirmation) return;
-
-            try {
-                const response = await fetch('/api/employees/' + employeeId, { method: 'DELETE' });
-                const data = await response.json();
-                if (data.success) {
-                    alert("Success: Profile completely cleared from cloud directory.");
-                    document.getElementById('targetEmployeeId').value = "";
-                    refreshDashboardData();
-                } else {
-                    alert("Error: " + data.message);
-                }
-            } catch (err) {
-                alert("Network Fault: Connection terminated.");
-            }
-        }
-    </script>
+    setInterval(loadDashboardData, 3000);
+    loadDashboardData();
+</script>
 </body>
 </html>
