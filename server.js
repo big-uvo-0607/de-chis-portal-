@@ -5,6 +5,12 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 
 // ========================================================
+// FRONTEND STATIC ROUTER FIX (Crucial for Render Deployment)
+// ========================================================
+// This serves your admin.html and index.html straight from your main directory
+app.use(express.static(__dirname));
+
+// ========================================================
 // 1. SYSTEM CONFIGURATION (SECURITY PERIMETERS)
 // ========================================================
 // Exact GPS coordinates for DE CHIS STORES
@@ -218,6 +224,4 @@ app.post('/api/absence-report', (req, res) => {
     res.json({ success: true, message: "Absence ticket filed directly into management console." });
 });
 
-app.listen(PORT, () => {
-    console.log(`[DE CHIS STORES PORTAL ACTIVE WITH CUSTOM SHIFT LOCKS ON PORT ${PORT}]`);
-});
+app.listen
