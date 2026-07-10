@@ -28,8 +28,8 @@ const attendanceSchema = new mongoose.Schema({
     employeeId: { type: String, required: true },
     checkInTime: { type: Date, required: true },
     checkOutTime: { type: Date, default: null },
-    latitude: { type: Number, required: true },
-    longitude: { type: Number, required: true }
+    latitude: { type: Number, default: 0 },
+    longitude: { type: Number, default: 0 }
 });
 
 const absenceSchema = new mongoose.Schema({
@@ -47,6 +47,7 @@ const Attendance = mongoose.model('Attendance', attendanceSchema);
 const Absence = mongoose.model('Absence', absenceSchema);
 const Notice = mongoose.model('Notice', noticeSchema);
 
+// Seeds fallback accounts if database is empty on initialization
 async function runSystemSeedingEngine() {
     try {
         const checkSeed = await Employee.findOne({ employeeId: "EMP001" });
@@ -71,33 +72,141 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/de_chis_sto
     });
 
 // ==========================================
-// PORTAL API OPERATIONAL ENDPOINTS
+// ADMIN DASHBOARD CORE PIPELINE ENDPOINTS
 // ==========================================
 
-app.get('/api/attendance/active-count', async function(req, res) {
+// GET: Aggregates stats, formatting streams to match your precise table rows
+app.get('/api/admin/data', async function(req, res) {
     try {
-        const activeCount = await Attendance.countDocuments({ checkOutTime: null });
-        return res.json({ count: activeCount });
+        const employees = await Employee.find().lean();
+        const attendance = await Attendance.find().sort({ checkInTime: -1 }).lean();
+        const absences = await Absence.find().sort({ filedAt: -1 }).lean();
+        const currentNoticeDoc = await Notice.findOne();
+        const currentNoticeText = currentNoticeDoc ? currentNoticeDoc.notice : "Welcome to DE Chis Stores Portal!";
+
+        // 1. Map to match: e.id, e.name
+        const employeeList = employees.map(e => ({
+            id: e.employeeId,
+            name: e.name
+        }));
+
+        // Dictionary to perform high-speed lookups for table joints
+        const empMap = {};
+        employees.forEach(e => {
+            empMap[e.employeeId] = { name: e.name, requiredHours: e.shiftHours || 10 };
+        });
+
+        // 2. Map to match: l.date, l.id, l.name, l.checkIn, l.checkOut, l.hoursWorked, l.flagged
+        const logs = attendance.map(l => {
+            const empInfo = empMap[l.employeeId] || { name: "Unknown Worker", requiredHours: 10 };
+            const checkInDate = new Date(l.checkInTime);
+            
+            // Adjust to display clean local strings
+            const dateStr = checkInDate.toISOString().split('T')[0];
+            const checkInStr = checkInDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            let checkOutStr = null;
+            let hoursWorked = null;
+            let flagged = false;
+
+            if (l.checkOutTime) {
+                const checkOutDate = new Date(l.checkOutTime);
+                checkOutStr = checkOutDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                hoursWorked = ((checkOutDate - checkInDate) / (1000 * 60 * 60)).toFixed(2);
+                
+                // Flag rule engine if worker logs out earlier than assigned shift configuration
+                if (parseFloat(hoursWorked) < empInfo.requiredHours) {
+                    flagged = true;
+                }
+            }
+
+            return {
+                date: dateStr,
+                id: l.employeeId,
+                name: empInfo.name,
+                checkIn: checkInStr,
+                checkOut: checkOutStr,
+                hoursWorked: hoursWorked,
+                flagged: flagged
+            };
+        });
+
+        // 3. Map to match: a.date, a.id, a.name, a.reason, a.submittedAt
+        const absenceReports = absences.map(a => {
+            const empInfo = empMap[a.employeeId] || { name: "Unknown Worker" };
+            const filedDate = new Date(a.filedAt);
+            return {
+                date: filedDate.toISOString().split('T')[0],
+                id: a.employeeId,
+                name: empInfo.name,
+                reason: a.reason,
+                submittedAt: filedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+        });
+
+        // Formatted package object sent down the line to client
+        return res.json({
+            employeeList: employeeList,
+            logs: logs,
+            absenceReports: absenceReports,
+            currentNotice: currentNoticeText
+        });
     } catch (err) {
-        return res.status(500).json({ count: 0, error: err.message });
+        return res.status(500).json({ error: err.message });
     }
 });
 
-// Admin-facing Management Registry Fetcher (Feeds the visual directory table)
-app.get('/api/management/employees', async function(req, res) {
+// POST: Handles worker submission from dashboard
+app.post('/api/admin/register', async function(req, res) {
     try {
-        const employees = await Employee.find().lean();
-        const activeShifts = await Attendance.find({ checkOutTime: null }).select('employeeId');
-        const activeIds = activeShifts.map(shift => shift.employeeId);
-        
-        const mappedRoster = employees.map(emp => {
-            emp.hasActiveShift = activeIds.includes(emp.employeeId);
-            return emp;
+        const { id, name, requiredHours } = req.body;
+        if (!id || !name) {
+            return res.status(400).json({ success: false, message: "Error: Parameters are completely empty!" });
+        }
+
+        const existing = await Employee.findOne({ employeeId: id });
+        if (existing) {
+            return res.status(400).json({ success: false, message: "Database Warning: Employee ID signature already assigned!" });
+        }
+
+        await Employee.create({
+            employeeId: id,
+            name: name,
+            shiftHours: requiredHours ? parseFloat(requiredHours) : 10
         });
-        
-        return res.json(mappedRoster);
-    } catch(err) {
-        return res.status(500).json({ error: err.message });
+
+        return res.json({ success: true, message: "System Log: Employee added to roster index files successfully!" });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// POST: Overwrites announcement record state strings
+app.post('/api/admin/notice', async function(req, res) {
+    try {
+        const { notice } = req.body;
+        let currentNotice = await Notice.findOne();
+        if (!currentNotice) {
+            currentNotice = new Notice();
+        }
+        currentNotice.notice = notice;
+        await currentNotice.save();
+        return res.json({ success: true, message: "Notice broadcast configurations synced globally!" });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// ==========================================
+// WORKERS APPLICATION UTILITY ENDPOINTS
+// ==========================================
+
+app.get('/api/notice', async function(req, res) {
+    try {
+        let currentNotice = await Notice.findOne();
+        return res.json({ notice: currentNotice ? currentNotice.notice : "Welcome to DE Chis Stores Portal!" });
+    } catch (err) {
+        return res.json({ notice: "Welcome to DE Chis Stores Portal!" });
     }
 });
 
@@ -129,17 +238,13 @@ app.get('/api/attendance/status/:id', async function(req, res) {
         if (completedShiftToday) return res.json({ status: "completed" });
         return res.json({ status: "not_checked_in" });
     } catch (err) {
-        return res.status(500).json({ error: "Internal core verification system fault." });
+        return res.status(500).json({ error: "Verification processing error." });
     }
 });
 
 app.post('/api/attendance', async function(req, res) {
     try {
-        const employeeId = req.body.employeeId;
-        const action = req.body.action;
-        const lat = req.body.lat;
-        const lon = req.body.lon;
-        
+        const { employeeId, action, lat, lon } = req.body;
         const employee = await Employee.findOne({ employeeId: employeeId });
         if (!employee) return res.status(403).json({ success: false, message: "Punch Denied: Profile ID missing." });
         
@@ -164,8 +269,7 @@ app.post('/api/attendance', async function(req, res) {
 
 app.post('/api/absence-report', async function(req, res) {
     try {
-        const employeeId = req.body.employeeId;
-        const reason = req.body.reason;
+        const { employeeId, reason } = req.body;
         const employee = await Employee.findOne({ employeeId: employeeId });
         if (!employee) return res.json({ success: false, message: "Ticket Denied: ID not recognized." });
 
@@ -177,60 +281,17 @@ app.post('/api/absence-report', async function(req, res) {
     }
 });
 
-app.delete('/api/employees/:employeeId', async function(req, res) {
-    try {
-        const id = req.params.employeeId;
-        const targetProfile = await Employee.findOne({ employeeId: id });
-        if (!targetProfile) return res.json({ success: false, message: "Operation Aborted: Profile ID not located." });
-
-        await Employee.deleteOne({ employeeId: id });
-        await Attendance.deleteMany({ employeeId: id, checkOutTime: null });
-        return res.json({ success: true, message: `Profile execution complete.` });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: "Administrative override terminal failure." });
-    }
-});
-
-app.get('/api/notice', async function(req, res) {
-    try {
-        let currentNotice = await Notice.findOne();
-        if (!currentNotice) {
-            currentNotice = new Notice();
-            await currentNotice.save();
-        }
-        return res.json({ notice: currentNotice.notice });
-    } catch (err) {
-        return res.json({ notice: "Welcome to DE Chis Stores Portal!" });
-    }
-});
-
-app.post('/api/notice', async function(req, res) {
-    try {
-        const incomingText = req.body.notice;
-        let currentNotice = await Notice.findOne();
-        if (!currentNotice) currentNotice = new Notice();
-        currentNotice.notice = incomingText;
-        await currentNotice.save();
-        return res.json({ success: true });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
-});
-
-// ==========================================
-// DEDICATED SEPARATE PAGE ROUTING ENGINE
-// ==========================================
-
+// Catch-all route definitions to handle clean standalone page decoupling
 app.get('/', function(req, res) {
     const mainPaths = [path.join(__dirname, 'public', 'index.html'), path.join(__dirname, 'index.html')];
     for (let p of mainPaths) { if (fs.existsSync(p)) return res.sendFile(p); }
-    res.status(404).send("Error: index.html missing.");
+    res.status(404).send("Error: index.html missing from public directory.");
 });
 
 app.get('/admin.html', function(req, res) {
     const adminPaths = [path.join(__dirname, 'public', 'admin.html'), path.join(__dirname, 'admin.html')];
     for (let p of adminPaths) { if (fs.existsSync(p)) return res.sendFile(p); }
-    res.status(404).send("Error: admin.html missing from public folder.");
+    res.status(404).send("Error: admin.html layout template missing.");
 });
 
 app.listen(PORT, function() {
