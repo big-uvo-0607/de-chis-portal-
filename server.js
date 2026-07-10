@@ -1,14 +1,15 @@
 const express = require('express');
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
 
 // ========================================================
-// FRONTEND STATIC ROUTER FIX (Crucial for Render Deployment)
+// FRONTEND STATIC ROUTER FIX (Bulletproof for Render)
 // ========================================================
-// This serves your admin.html and index.html straight from your main directory
-app.use(express.static(__dirname));
+// This explicitly instructs the Linux container to serve your HTML files
+app.use(express.static(path.join(__dirname)));
 
 // ========================================================
 // 1. SYSTEM CONFIGURATION (SECURITY PERIMETERS)
@@ -224,4 +225,6 @@ app.post('/api/absence-report', (req, res) => {
     res.json({ success: true, message: "Absence ticket filed directly into management console." });
 });
 
-app.listen
+app.listen(PORT, () => {
+    console.log(`[DE CHIS STORES PORTAL ACTIVE WITH CUSTOM SHIFT LOCKS ON PORT ${PORT}]`);
+});
