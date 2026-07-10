@@ -47,7 +47,6 @@
             transition: background 0.5s ease;
         }
 
-        /* Dynamic Visual Sparks: Ambient Depth Lighting */
         body::before {
             content: ''; position: absolute; top: -10%; left: -10%; width: 500px; height: 500px;
             background: rgba(26, 58, 95, 0.06); border-radius: 50%; filter: blur(100px); z-index: 0; pointer-events: none;
@@ -57,7 +56,6 @@
             background: rgba(46, 125, 74, 0.07); border-radius: 50%; filter: blur(100px); z-index: 0; pointer-events: none;
         }
         
-        /* Premium Floating Utility Controls Bar */
         .top-bar {
             position: absolute;
             top: 25px;
@@ -103,7 +101,6 @@
             font-weight: 500; z-index: 1; transition: color 0.3s ease;
         }
 
-        /* Real-Time Status Monitors */
         .clock-widget {
             background: #1a3a5f; color: #ffffff; padding: 8px 18px; border-radius: 50px;
             font-size: 0.9rem; font-weight: 700; margin-bottom: 25px;
@@ -111,7 +108,6 @@
             letter-spacing: 0.5px; z-index: 1;
         }
 
-        /* Enterprise Operations Live Analytics Dashboard Grid */
         .stats-grid {
             display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
             width: 100%; max-width: 480px; margin-bottom: 25px; z-index: 1;
@@ -124,7 +120,6 @@
         .stat-capsule p { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 2px;}
         .stat-capsule h4 { font-size: 1.1rem; color: var(--text-primary); font-weight: 700; }
 
-        /* Announcement Board Banner */
         #noticeBanner {
             background: #fff9db; color: #856404; padding: 16px 20px; margin-bottom: 25px; 
             border-radius: 14px; border: 1px solid #ffe3e3; display: none; text-align: center; 
@@ -132,7 +127,6 @@
             width: 100%; max-width: 480px; animation: slideDown 0.5s ease; z-index: 1;
         }
 
-        /* Apple-Style Premium Glassmorphic Core Container Layout */
         .portal-card {
             background: var(--card-bg); 
             padding: 40px 35px; 
@@ -155,7 +149,6 @@
             margin-bottom: 12px; font-size: 0.95rem; text-align: left; 
         }
         
-        /* Interactive Input Glows */
         input[type="text"], textarea { 
             width: 100%; padding: 14px 16px; font-size: 1.1rem; 
             border: 2px solid var(--input-border); border-radius: 12px; margin-bottom: 20px; 
@@ -166,8 +159,10 @@
             outline: none; border-color: #1a3a5f; background: var(--input-bg);
             box-shadow: 0 0 0 4px rgba(26, 58, 95, 0.12);
         }
+        textarea {
+            resize: vertical; /* Prevents tearing layout cards apart */
+        }
 
-        /* Error Shake Animation Spark */
         .shake-error {
             animation: shake 0.4s ease;
             border-color: #e63946 !important;
@@ -182,7 +177,6 @@
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* Infinite Metallic Moving Shimmer Sweep Line */
         .btn-verify { 
             background: linear-gradient(90deg, #1a3a5f 0%, #2b5c8f 50%, #1a3a5f 100%);
             background-size: 200% auto;
@@ -194,7 +188,6 @@
             box-shadow: 0 6px 20px rgba(26, 58, 95, 0.35);
         }
 
-        /* Pulsing Glow Action States */
         .btn-in { 
             background-color: #2e7d32; display: none; 
             box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2); animation: pulseGreen 2s infinite;
@@ -207,7 +200,6 @@
         }
         .btn-out:hover { background-color: #b71c1c; transform: translateY(-2px); }
 
-        /* Status Feedback Badges */
         #alertBox, #adminAlert { 
             margin-top: 20px; padding: 14px; border-radius: 12px; font-weight: 600; 
             display: none; font-size: 0.95rem; animation: fadeIn 0.4s ease;
@@ -223,7 +215,6 @@
         
         .hidden-panel { display: none !important; }
 
-        /* Animation Architectures */
         @keyframes metallicSweep {
             0% { background-position: 0% center; }
             100% { background-position: 200% center; }
@@ -337,9 +328,8 @@
     </div>
 
     <script>
-        let workTimerInterval = null; // Global reference for tracking operational workshift counter loop
+        let workTimerInterval = null; 
 
-        // Master Dynamic Workscape Theme Swapper Engine
         function toggleSystemTheme() {
             document.body.classList.toggle('dark-theme');
             const isDark = document.body.classList.contains('dark-theme');
@@ -353,7 +343,6 @@
             }
         }
 
-        // Core Engine For Live Ticking Clock and Current Date
         function startLiveClock() {
             setInterval(() => {
                 const now = new Date();
@@ -363,19 +352,17 @@
             }, 1000);
         }
 
-        // Integrated Dynamic Staff Count Database Poller
         async function updateActiveStaffCount() {
             try {
                 const res = await fetch('/api/attendance/active-count');
                 const data = await res.json();
-                document.getElementById('activeStaffCount').innerText = `${data.count} Staff`;
+                document.getElementById('activeStaffCount').innerText = `${data.count || 0} Staff`;
             } catch (err) {
                 document.getElementById('activeStaffCount').innerText = "Offline";
                 console.log("Error fetching live count");
             }
         }
 
-        // Time-of-Day Smart Greeting Generator
         function getTimeOfDayGreeting(employeeName) {
             const currentHour = new Date().getHours();
             if (currentHour < 12) return `☀️ Good Morning, ${employeeName}! Have a great shift today.`;
@@ -389,17 +376,13 @@
             document.getElementById('adminCard').classList.add('hidden-panel');
         }
 
-        // Secured Admin Panel Gatekeeper Engine with PIN code validation
         function toggleAdminPanel() {
             const card = document.getElementById('adminCard');
-            
             if (!card.classList.contains('hidden-panel')) {
                 card.classList.add('hidden-panel');
                 return;
             }
-            
             const accessPin = prompt("⚠️ Security Alert: Enter Admin System PIN to unlock control panel:");
-            
             if (accessPin === "2026") { 
                 showAlert("Admin Access Granted.", "success");
                 card.classList.remove('hidden-panel');
@@ -409,7 +392,6 @@
             }
         }
 
-        // Frontend Engine to communicate with backend DELETE endpoint
         async function deleteEmployeeProfile() {
             const inputField = document.getElementById('deleteEmpId');
             const id = inputField.value.trim();
@@ -446,7 +428,6 @@
             }
         }
 
-        // High-Precision Shift Tracking Clock Engine (32px Display Loop)
         function startWorkTimer(checkInTimeISO, shiftHours) {
             if (workTimerInterval) clearInterval(workTimerInterval);
             
@@ -461,7 +442,6 @@
             workTimerInterval = setInterval(() => {
                 const now = new Date();
                 const differenceInMs = now - checkInDate;
-                
                 if (differenceInMs < 0) return;
                 
                 const totalSeconds = Math.floor(differenceInMs / 1000);
@@ -469,12 +449,10 @@
                 const minutes = Math.floor((totalSeconds % 3600) / 60);
                 const seconds = totalSeconds % 60;
                 
-                const formattedDisplay = 
+                timerDisplay.innerText = 
                     String(hours).padStart(2, '0') + ":" + 
                     String(minutes).padStart(2, '0') + ":" + 
                     String(seconds).padStart(2, '0');
-                    
-                timerDisplay.innerText = formattedDisplay;
             }, 1000);
         }
 
@@ -523,8 +501,6 @@
                         welcomeMessage.style.display = "block";
                         checkOutBtn.style.display = "block";
                         showAlert(`Active shift log started at ${data.checkInTime}.`, "success");
-                        
-                        // Fire up high-precision 32px work clock display engine using registered hours
                         startWorkTimer(data.checkInTimeRaw, data.shiftHours || 10);
                     } else if (data.status === "completed") {
                         showAlert("Shift workflow completely finished for today. Thank you!", "success");
@@ -532,7 +508,7 @@
                         if (workTimerInterval) clearInterval(workTimerInterval);
                     }
                 } catch (err) {
-                    showAlert("Network fault: Couldn't establish a link to the Render backend server.", "error");
+                    showAlert("Network fault: Couldn't establish a link to the server.", "error");
                 } finally {
                     verifyBtn.innerText = originalText;
                     verifyBtn.style.opacity = "1";
@@ -554,18 +530,22 @@
         }
 
         async function sendAttendance(employeeId, action, lat, lon) {
-            const response = await fetch('/api/attendance', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ employeeId, action, lat, lon })
-            });
-            const data = await response.json();
-            if(data.success) {
-                showAlert(data.message, "success");
-                checkUserStatus(); 
-                updateActiveStaffCount();
-            } else {
-                showAlert(data.message, "error");
+            try {
+                const response = await fetch('/api/attendance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ employeeId, action, lat, lon })
+                });
+                const data = await response.json();
+                if(data.success) {
+                    showAlert(data.message, "success");
+                    checkUserStatus(); 
+                    updateActiveStaffCount();
+                } else {
+                    showAlert(data.message, "error");
+                }
+            } catch (err) {
+                showAlert("Network fault: Failed to transfer attendance signature data.", "error");
             }
         }
 
@@ -576,21 +556,27 @@
             
             if(!employeeId || !reason) return alert("Fill in your ID and reason!");
 
-            const res = await fetch('/api/absence-report', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ employeeId, reason })
-            });
-            const data = await res.json();
-            
-            box.innerText = data.message;
-            box.style.display = "block";
-            box.className = data.success ? "success" : "error";
-            
-            if(data.success) {
-                document.getElementById('absentEmpId').value = "";
-                document.getElementById('absenceReason').value = "";
-                setTimeout(() => { toggleAbsenceForm(); }, 1800);
+            try {
+                const res = await fetch('/api/absence-report', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ employeeId, reason })
+                });
+                const data = await res.json();
+                
+                box.innerText = data.message;
+                box.style.display = "block";
+                box.className = data.success ? "success" : "error";
+                
+                if(data.success) {
+                    document.getElementById('absentEmpId').value = "";
+                    document.getElementById('absenceReason').value = "";
+                    setTimeout(() => { toggleAbsenceForm(); }, 1800);
+                }
+            } catch (err) {
+                box.innerText = "Network Error: Couldn't file your absence ticket.";
+                box.className = "error";
+                box.style.display = "block";
             }
         }
 
@@ -603,7 +589,6 @@
             try {
                 const res = await fetch('/api/notice');
                 const data = await res.json();
-                
                 if (data.notice && data.notice !== "Welcome to DE Chis Stores Portal!") {
                     document.getElementById('noticeContent').innerText = data.notice;
                     document.getElementById('noticeBanner').style.display = 'block';
@@ -611,7 +596,7 @@
                     document.getElementById('noticeBanner').style.display = 'none';
                 }
             } catch (err) {
-                console.log("Notice board engine optimized.");
+                console.log("Notice board core sleeping.");
             }
         }
 
