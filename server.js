@@ -3,7 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path'); 
-const fs = require('fs'); // Added to physically scan and inspect files on Render
+const fs = require('fs'); 
 require('dotenv').config();
 
 const app = express();
@@ -48,7 +48,6 @@ const Attendance = mongoose.model('Attendance', attendanceSchema);
 const Absence = mongoose.model('Absence', absenceSchema);
 const Notice = mongoose.model('Notice', noticeSchema);
 
-// Self-Executing System Developer Seed Block
 async function runSystemSeedingEngine() {
     try {
         const checkSeed = await Employee.findOne({ employeeId: "EMP001" });
@@ -212,54 +211,46 @@ app.get('/api/notice', async function(req, res) {
     }
 });
 
-// Smart Catch-All Interface Loader (Checks multiple name formats and subfolders)
-app.get('*', function(req, res) {
-    const fallbackPaths = [
-        path.join(__dirname, 'index.html'),
-        path.join(__dirname, 'Index.html'),
+// ==========================================
+// DEDICATED SEPARATE PAGE ROUTING ENGINE
+// ==========================================
+
+// 1. ROUTE FOR WORKERS PORTAL (index.html)
+app.get('/', function(req, res) {
+    const mainPaths = [
         path.join(__dirname, 'public', 'index.html'),
-        path.join(__dirname, 'public', 'Index.html')
+        path.join(__dirname, 'index.html')
     ];
-
-    for (let targetPath of fallbackPaths) {
-        if (fs.existsSync(targetPath)) {
-            return res.sendFile(targetPath);
-        }
+    for (let p of mainPaths) {
+        if (fs.existsSync(p)) return res.sendFile(p);
     }
+    res.status(404).send("Error: index.html could not be located in your folders.");
+});
 
-    // Emergency UI placeholder if the HTML file completely failed to upload to GitHub
-    res.status(200).send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #f4f6f9; color: #333; padding: 50px 20px; }
-                .card { background: white; max-width: 500px; margin: 0 auto; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-                h1 { color: #2c3e50; font-size: 24px; margin-bottom: 10px; }
-                p { color: #7f8c8d; font-size: 16px; line-height: 1.6; }
-                .badge { background: #e67e22; color: white; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; display: inline-block; margin-bottom: 20px; }
-            </style>
-        </head>
-        <body>
-            <div class="card">
-                <div class="badge">SYSTEM ONLINE</div>
-                <h1>DE CHIS STORES WORKERS PORTAL</h1>
-                <p>The core application database and background engine are fully live and operational.</p>
-                <p style="color: #e74c3c; font-weight: 500;">Notice: The main user interface file (index.html) is missing from your GitHub root directory folder. Please push your index.html file to bring up the main dashboard screen.</p>
-            </div>
-        </body>
-        </html>
-    `);
+// 2. ROUTE FOR SEPARATE ADMIN PORTAL (admin.html)
+app.get('/admin.html', function(req, res) {
+    const adminPaths = [
+        path.join(__dirname, 'public', 'admin.html'),
+        path.join(__dirname, 'admin.html')
+    ];
+    for (let p of adminPaths) {
+        if (fs.existsSync(p)) return res.sendFile(p);
+    }
+    res.status(404).send("Error: admin.html could not be found. Make sure it is saved inside your 'public' folder next to index.html!");
+});
+
+// 3. Short URL Helper (So typing /admin works too)
+app.get('/admin', function(req, res) {
+    const adminPaths = [
+        path.join(__dirname, 'public', 'admin.html'),
+        path.join(__dirname, 'admin.html')
+    ];
+    for (let p of adminPaths) {
+        if (fs.existsSync(p)) return res.sendFile(p);
+    }
+    res.status(404).send("Error: admin.html is missing from your project folders.");
 });
 
 app.listen(PORT, function() {
     console.log(`📡 DE CHIS Operational Grid Core broadcast active on port: ${PORT}`);
-    try {
-        // This will print out exactly what files are present on Render to help us instantly inspect the server directory
-        const filesFound = fs.readdirSync(__dirname);
-        console.log("📂 [DIRECTORY SCANNER] Found files inside Render root folder:", filesFound);
-    } catch(e) {
-        console.log("❌ Folder scanning error:", e.message);
-    }
 });
