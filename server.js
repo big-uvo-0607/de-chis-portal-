@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 
 // ========================================================
-// FOLDER PATH CORRECTION (Matches your public/ folder setup)
+// FOLDER PATH CORRECTION (Matches public/ layout)
 // ========================================================
 app.get('/', (req, res) => {
     const filePath = path.join(__dirname, 'public', 'index.html');
@@ -40,7 +40,7 @@ app.get('/admin.html', (req, res) => {
     });
 });
 
-// Serve all other static assets (like CSS/JS) from the public folder automatically
+// Serve static assets from both public and root directory levels safely
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname)));
 
@@ -51,33 +51,12 @@ const STORE_COORDS = { lat: 9.852923, lon: 8.852990 };
 const MAX_DISTANCE_METERS = 100; 
 
 // ========================================================
-// 2. SIMULATED DATABASE (EMPLOYEES WITH CUSTOM SHIFTS)
+// 2. SIMULATED DATABASE (EMPLOYEES WITH DYNAMIC SHIFTS)
 // ========================================================
 let employees = {
-    "EMP001": { 
-        id: "EMP001", 
-        name: "John Doe", 
-        role: "Floor Manager", 
-        shiftHours: 9, 
-        cutoffHour: 8, 
-        cutoffMinute: 5 
-    },
-    "EMP002": { 
-        id: "EMP002", 
-        name: "Jane Smith", 
-        role: "Cashier", 
-        shiftHours: 8, 
-        cutoffHour: 15, 
-        cutoffMinute: 0 
-    },
-    "EMP003": { 
-        id: "EMP003", 
-        name: "Blessing Okafor", 
-        role: "Inventory Supervisor", 
-        shiftHours: 10, 
-        cutoffHour: 8, 
-        cutoffMinute: 5 
-    }
+    "EMP001": { id: "EMP001", name: "John Doe", role: "Floor Manager", shiftHours: 9, cutoffHour: 8, cutoffMinute: 5 },
+    "EMP002": { id: "EMP002", name: "Jane Smith", role: "Cashier", shiftHours: 8, cutoffHour: 15, cutoffMinute: 0 },
+    "EMP003": { id: "EMP003", name: "Blessing Okafor", role: "Inventory Supervisor", shiftHours: 10, cutoffHour: 8, cutoffMinute: 5 }
 };
 
 let attendanceLog = {}; 
@@ -112,6 +91,29 @@ function isPastEmployeeCutoff(employee) {
 // ========================================================
 // 4. API ROUTERS / ENDPOINTS
 // ========================================================
+
+// DUAL-ROUTE HANDLER (Fixes the admin "cannot connect" dashboard problem)
+app.post(['/api/employees', '/api/admin/register'], (req, res) => {
+    const { id, name, role, requiredHours, shiftHours, cutoffHour, cutoffMinute } = req.body;
+    
+    if (!id || !name) {
+        return res.status(400).json({ success: false, message: "Missing tracking keys. ID and Name are required." });
+    }
+    
+    const targetId = id.toUpperCase();
+    
+    employees[targetId] = {
+        id: targetId,
+        name: name,
+        role: role || "Staff Member",
+        shiftHours: parseInt(shiftHours) || parseInt(requiredHours) || 8,
+        cutoffHour: cutoffHour !== undefined ? parseInt(cutoffHour) : 8,
+        cutoffMinute: cutoffMinute !== undefined ? parseInt(cutoffMinute) : 0
+    };
+
+    res.json({ success: true, message: `Dynamic profile created for ${name} successfully!` });
+});
+
 app.get('/api/notice', (req, res) => {
     res.json({ notice: systemNotice });
 });
