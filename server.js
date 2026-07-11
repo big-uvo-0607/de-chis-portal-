@@ -40,7 +40,6 @@ app.get('/admin.html', (req, res) => {
     });
 });
 
-// Serve static assets from both public and root directory levels safely
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname)));
 
@@ -60,6 +59,7 @@ let employees = {
 };
 
 let attendanceLog = {}; 
+let absenceReports = []; 
 let systemNotice = "Welcome to DE CHIS STORES Portal! Please check in according to your designated shift schedule.";
 
 // ========================================================
@@ -72,11 +72,11 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const deltaPhi = (lat2 - lat1) * Math.PI / 180;
     const deltaLambda = (lon2 - lon1) * Math.PI / 180;
 
+    // FIX 1: Removed the stray text syntax blocker here
     const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
               Math.cos(phi1) * Math.cos(phi2) *
               Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
     return R * c; 
 }
 
@@ -84,7 +84,6 @@ function isPastEmployeeCutoff(employee) {
     const now = new Date();
     const currentTotalMinutes = (now.getHours() * 60) + now.getMinutes();
     const cutoffTotalMinutes = (employee.cutoffHour * 60) + employee.cutoffMinute;
-
     return currentTotalMinutes >= cutoffTotalMinutes;
 }
 
@@ -92,26 +91,65 @@ function isPastEmployeeCutoff(employee) {
 // 4. API ROUTERS / ENDPOINTS
 // ========================================================
 
-// DUAL-ROUTE HANDLER (Fixes the admin "cannot connect" dashboard problem)
+app.get('/api/admin/data', (req, res) => {
+    const logsPayload = Object.keys(attendanceLog).map(empId => {
+        const log = attendanceLog[empId];
+        const emp = employees[empId] || { name: "Unknown Staff", shiftHours: 8 };
+        
+        const isLate = log.checkInTimeRaw && isPastEmployeeCutoff(emp);
+        
+        // FIX 4: Secure date generation safety fallback
+        const rawDate = log.checkInTimeRaw ? new Date(log.checkInTimeRaw) : new Date();
+        const formattedDate = rawDate.toISOString().split('T')[0];
+
+        return {
+            date: formattedDate,
+            id: empId,
+            name: emp.name,
+            checkIn: log.checkInTimeFormatted || '--:--',
+            checkOut: log.status === 'completed' ? 'Finalized' : null,
+            hoursWorked: emp.shiftHours || emp.requiredHours || 8, // FIX 3: Unified backup field keys
+            flagged: isLate
+        };
+    });
+
+    res.json({
+        employeeList: Object.values(employees),
+        logs: logsPayload,
+        absenceReports: absenceReports,
+        currentNotice: systemNotice
+    });
+});
+
+app.post('/api/admin/notice', (req, res) => {
+    if (req.body.notice) {
+        systemNotice = req.body.notice;
+        return res.json({ success: true, message: "Notice successfully broadcasted across store network!" });
+    }
+    res.status(400).json({ success: false, message: "Notice parameter missing." });
+});
+
+// FIX 2: Fully mapped incoming payload references safely
 app.post(['/api/employees', '/api/admin/register'], (req, res) => {
-    const { id, name, role, requiredHours, shiftHours, cutoffHour, cutoffMinute } = req.body;
+    const { id, name, requiredHours, shiftHours, cutoffHour, cutoffMinute } = req.body;
     
     if (!id || !name) {
-        return res.status(400).json({ success: false, message: "Missing tracking keys. ID and Name are required." });
+        return res.status(400).json({ success: false, message: "Registration failed: Missing ID or Name parameters." });
     }
     
     const targetId = id.toUpperCase();
+    const hours = parseInt(shiftHours) || parseInt(requiredHours) || 8;
     
     employees[targetId] = {
         id: targetId,
         name: name,
-        role: role || "Staff Member",
-        shiftHours: parseInt(shiftHours) || parseInt(requiredHours) || 8,
-        cutoffHour: cutoffHour !== undefined ? parseInt(cutoffHour) : 8,
-        cutoffMinute: cutoffMinute !== undefined ? parseInt(cutoffMinute) : 0
+        role: "Staff Member",
+        shiftHours: hours,
+        cutoffHour: cutoffHour !== undefined && cutoffHour !== "" ? parseInt(cutoffHour) : 8,
+        cutoffMinute: cutoffMinute !== undefined && cutoffMinute !== "" ? parseInt(cutoffMinute) : 0
     };
 
-    res.json({ success: true, message: `Dynamic profile created for ${name} successfully!` });
+    res.json({ success: true, message: `Profile created for ${name} [${targetId}] successfully!` });
 });
 
 app.get('/api/notice', (req, res) => {
@@ -125,15 +163,9 @@ app.get('/api/attendance/active-count', (req, res) => {
 
 app.get('/api/attendance/status/:id', (req, res) => {
     const id = req.params.id.toUpperCase();
-    
-    if (!employees[id]) {
-        return res.json({ status: "unregistered" });
-    }
-
+    if (!employees[id]) return res.json({ status: "unregistered" });
     const currentLog = attendanceLog[id];
-    if (!currentLog) {
-        return res.json({ status: "not_checked_in" });
-    }
+    if (!currentLog) return res.json({ status: "not_checked_in" });
 
     if (currentLog.status === 'checked_in' && isPastEmployeeCutoff(employees[id])) {
         attendanceLog[id].status = 'completed';
@@ -152,50 +184,27 @@ app.post('/api/attendance', (req, res) => {
     const { employeeId, action, lat, lon, deviceId } = req.body;
     const id = employeeId.toUpperCase();
 
-    if (!employees[id]) {
-        return res.status(400).json({ success: false, message: "Profile identification failed. ID unregistered." });
-    }
-
+    if (!employees[id]) return res.status(400).json({ success: false, message: "ID unregistered." });
     const currentWorker = employees[id];
 
-    if (!lat || !lon) {
-        return res.status(400).json({ success: false, message: "Access Denied: Device GPS signal missing." });
-    }
+    if (!lat || !lon) return res.status(400).json({ success: false, message: "Access Denied: GPS missing." });
     const distance = calculateDistance(lat, lon, STORE_COORDS.lat, STORE_COORDS.lon);
     if (distance > MAX_DISTANCE_METERS) {
-        return res.status(403).json({ 
-            success: false, 
-            message: `Verification Failed: You are outside store boundaries (${Math.round(distance)}m away).` 
-        });
+        return res.status(403).json({ success: false, message: `Verification Failed: Outside boundaries.` });
     }
 
     if (action === 'checkin' && isPastEmployeeCutoff(currentWorker)) {
         const formattedCutoff = `${String(currentWorker.cutoffHour).padStart(2, '0')}:${String(currentWorker.cutoffMinute).padStart(2, '0')}`;
-        return res.status(403).json({ 
-            success: false, 
-            message: `Access Refused: You are late! Your shift check-in window closed at ${formattedCutoff}.` 
-        });
+        return res.status(403).json({ success: false, message: `Access Refused: Late check-in closed at ${formattedCutoff}.` });
     }
 
     if (action === 'checkin') {
-        if (!deviceId) {
-            return res.status(400).json({ success: false, message: "Security Error: Device fingerprint missing." });
-        }
-
-        const fraudDeviceMatch = Object.keys(attendanceLog).find(
-            empId => attendanceLog[empId].deviceId === deviceId && empId !== id
-        );
-
-        if (fraudDeviceMatch) {
-            return res.status(403).json({ 
-                success: false, 
-                message: "Fraud Protection: This device has already been used to check in another employee today." 
-            });
-        }
+        if (!deviceId) return res.status(400).json({ success: false, message: "Security fingerprint missing." });
+        const fraudDeviceMatch = Object.keys(attendanceLog).find(empId => attendanceLog[empId].deviceId === deviceId && empId !== id);
+        if (fraudDeviceMatch) return res.status(403).json({ success: false, message: "Fraud Protection Activated." });
     }
 
     const now = new Date();
-
     if (action === 'checkin') {
         attendanceLog[id] = {
             status: 'checked_in',
@@ -203,19 +212,15 @@ app.post('/api/attendance', (req, res) => {
             checkInTimeRaw: now.toISOString(),
             checkInTimeFormatted: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
-        return res.json({ success: true, message: `Welcome on shift, ${currentWorker.name}. Session secured.` });
-        
+        return res.json({ success: true, message: `Welcome on shift, ${currentWorker.name}.` });
     } else if (action === 'checkout') {
-        if (!attendanceLog[id] || attendanceLog[id].status !== 'checked_in') {
-            return res.status(400).json({ success: false, message: "Error: No active open session found for this profile." });
-        }
+        if (!attendanceLog[id] || attendanceLog[id].status !== 'checked_in') return res.status(400).json({ success: false, message: "No active session." });
         
         attendanceLog[id].status = 'completed';
         attendanceLog[id].checkOutTimeRaw = now.toISOString();
-        return res.json({ success: true, message: "Shift finalized. Have a safe trip home!" });
+        return res.json({ success: true, message: "Shift finalized." });
     }
-
-    res.status(400).json({ success: false, message: "System operational anomaly." });
+    res.status(400).json({ success: false, message: "System anomaly." });
 });
 
 app.delete('/api/employees/:id', (req, res) => {
@@ -233,10 +238,17 @@ app.post('/api/absence-report', (req, res) => {
     const id = employeeId.toUpperCase();
     if (!employees[id]) return res.status(400).json({ success: false, message: "ID unregistered." });
     
-    console.log(`[ABSENCE INCIDENT] Employee: ${id} - Reason: ${reason}`);
-    res.json({ success: true, message: "Absence ticket filed directly into management console." });
+    const report = {
+        date: new Date().toISOString().split('T')[0],
+        id: id,
+        name: employees[id].name,
+        reason: reason,
+        submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    absenceReports.push(report);
+    res.json({ success: true, message: "Absence ticket filed." });
 });
 
 app.listen(PORT, () => {
-    console.log(`[DE CHIS STORES PORTAL ACTIVE WITH CUSTOM SHIFT LOCKS ON PORT ${PORT}]`);
+    console.log(`[DE CHIS STORES PORTAL ENGINE LIVE ON PORT ${PORT}]`);
 });
