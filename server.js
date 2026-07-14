@@ -1,70 +1,72 @@
 const express = require('express');
 const path = require('path');
+const mongoose = require('mongoose'); // Import Mongoose
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
 
 // ========================================================
-// FOLDER PATH CORRECTION (Matches public/ layout)
+// MONGODB CONNECTION SETUP
 // ========================================================
-app.get('/', (req, res) => {
-    const filePath = path.join(__dirname, 'public', 'index.html');
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            res.status(404).send("<h1>DE CHIS STORES Portal</h1><p>index.html not found inside the public folder.</p>");
-        }
-    });
-});
+const MONGO_URI = process.env.MONGODB_URI || "your_fallback_mongodb_connection_string_here";
 
-app.get('/index.html', (req, res) => {
-    const filePath = path.join(__dirname, 'public', 'index.html');
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            res.status(404).send("<h1>Error</h1><p>index.html not found inside public folder.</p>");
-        }
-    });
-});
-
-app.get('/admin.html', (req, res) => {
-    let filePath = path.join(__dirname, 'admin.html');
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            filePath = path.join(__dirname, 'public', 'admin.html');
-            res.sendFile(filePath, (err2) => {
-                if (err2) {
-                    res.status(404).send("<h1>Error</h1><p>admin.html not found in root or public folder.</p>");
-                }
-            });
-        }
-    });
-});
-
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(path.join(__dirname)));
+mongoose.connect(MONGO_URI)
+    .then(() => console.log("✔️ [SUCCESS] Connected securely to MongoDB Atlas database"))
+    .catch((err) => console.error("❌ [DATABASE ERROR] Failed to connect to MongoDB:", err));
 
 // ========================================================
-// 1. SYSTEM CONFIGURATION (SECURITY PERIMETERS)
+// DATABASE SCHEMAS & MODELS
+// ========================================================
+const EmployeeSchema = new mongoose.Schema({
+    id: { type: String, required: true, unique: true, uppercase: true },
+    name: { type: String, required: true },
+    role: { type: String, default: "Staff Member" },
+    shiftHours: { type: Number, default: 8 },
+    cutoffHour: { type: Number, default: 8 },
+    cutoffMinute: { type: Number, default: 0 }
+});
+const Employee = mongoose.model('Employee', EmployeeSchema);
+
+const AttendanceLogSchema = new mongoose.Schema({
+    employeeId: { type: String, required: true, uppercase: true },
+    status: { type: String, default: 'checked_in' }, // 'checked_in' or 'completed'
+    deviceId: { type: String, required: true },
+    checkInTimeRaw: { type: Date, default: Date.now },
+    checkInTimeFormatted: { type: String, required: true },
+    checkOutTimeRaw: { type: Date }
+});
+const AttendanceLog = mongoose.model('AttendanceLog', AttendanceLogSchema);
+
+const AbsenceReportSchema = new mongoose.Schema({
+    date: { type: String, required: true },
+    employeeId: { type: String, required: true, uppercase: true },
+    name: { type: String, required: true },
+    reason: { type: String, required: true },
+    submittedAt: { type: String, required: true }
+});
+const AbsenceReport = mongoose.model('AbsenceReport', AbsenceReportSchema);
+
+const NoticeSchema = new mongoose.Schema({
+    noticeText: { type: String, default: "Welcome to DE CHIS STORES Portal! Please check in according to your designated shift schedule." }
+});
+const Notice = mongoose.model('Notice', NoticeSchema);
+
+// Helper function to get or initialize the notice
+async function getNoticeText() {
+    let noticeObj = await Notice.findOne();
+    if (!noticeObj) {
+        noticeObj = await Notice.create({ noticeText: "Welcome to DE CHIS STORES Portal! Please check in according to your designated shift schedule." });
+    }
+    return noticeObj.noticeText;
+}
+
+// ========================================================
+// SECURE VALIDATION ENGINES
 // ========================================================
 const STORE_COORDS = { lat: 9.852923, lon: 8.852990 }; 
 const MAX_DISTANCE_METERS = 100; 
 
-// ========================================================
-// 2. SIMULATED DATABASE (EMPLOYEES WITH DYNAMIC SHIFTS)
-// ========================================================
-let employees = {
-    "EMP001": { id: "EMP001", name: "John Doe", role: "Floor Manager", shiftHours: 9, cutoffHour: 8, cutoffMinute: 5 },
-    "EMP002": { id: "EMP002", name: "Jane Smith", role: "Cashier", shiftHours: 8, cutoffHour: 15, cutoffMinute: 0 },
-    "EMP003": { id: "EMP003", name: "Blessing Okafor", role: "Inventory Supervisor", shiftHours: 10, cutoffHour: 8, cutoffMinute: 5 }
-};
-
-let attendanceLog = {}; 
-let absenceReports = []; 
-let systemNotice = "Welcome to DE CHIS STORES Portal! Please check in according to your designated shift schedule.";
-
-// ========================================================
-// 3. SECURE VALIDATION ENGINES
-// ========================================================
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3; 
     const phi1 = lat1 * Math.PI / 180;
@@ -72,7 +74,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const deltaPhi = (lat2 - lat1) * Math.PI / 180;
     const deltaLambda = (lon2 - lon1) * Math.PI / 180;
 
-    // FIX 1: Removed the stray text syntax blocker here
     const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
               Math.cos(phi1) * Math.cos(phi2) *
               Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
@@ -88,167 +89,239 @@ function isPastEmployeeCutoff(employee) {
 }
 
 // ========================================================
-// 4. API ROUTERS / ENDPOINTS
+// FOLDER PATH CORRECTION
+// ========================================================
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/index.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/admin.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname)));
+
+// ========================================================
+// API ROUTERS / ENDPOINTS (CONVERTED TO MONGOOSE)
 // ========================================================
 
-app.get('/api/admin/data', (req, res) => {
-    const logsPayload = Object.keys(attendanceLog).map(empId => {
-        const log = attendanceLog[empId];
-        const emp = employees[empId] || { name: "Unknown Staff", shiftHours: 8 };
-        
-        const isLate = log.checkInTimeRaw && isPastEmployeeCutoff(emp);
-        
-        // FIX 4: Secure date generation safety fallback
-        const rawDate = log.checkInTimeRaw ? new Date(log.checkInTimeRaw) : new Date();
-        const formattedDate = rawDate.toISOString().split('T')[0];
+// 1. ADMIN DATA PANEL FEED
+app.get('/api/admin/data', async (req, res) => {
+    try {
+        const employeeList = await Employee.find({});
+        const activeLogs = await AttendanceLog.find({});
+        const absenceList = await AbsenceReport.find({});
+        const activeNotice = await getNoticeText();
 
-        return {
-            date: formattedDate,
-            id: empId,
-            name: emp.name,
-            checkIn: log.checkInTimeFormatted || '--:--',
-            checkOut: log.status === 'completed' ? 'Finalized' : null,
-            hoursWorked: emp.shiftHours || emp.requiredHours || 8, // FIX 3: Unified backup field keys
-            flagged: isLate
-        };
-    });
+        const logsPayload = activeLogs.map(log => {
+            const emp = employeeList.find(e => e.id === log.employeeId) || { name: "Unknown Staff", shiftHours: 8 };
+            const isLate = log.checkInTimeRaw && isPastEmployeeCutoff(emp);
+            const rawDate = log.checkInTimeRaw ? new Date(log.checkInTimeRaw) : new Date();
 
-    res.json({
-        employeeList: Object.values(employees),
-        logs: logsPayload,
-        absenceReports: absenceReports,
-        currentNotice: systemNotice
-    });
-});
+            return {
+                date: rawDate.toISOString().split('T')[0],
+                id: log.employeeId,
+                name: emp.name,
+                checkIn: log.checkInTimeFormatted || '--:--',
+                checkOut: log.status === 'completed' ? 'Finalized' : null,
+                hoursWorked: emp.shiftHours || 8,
+                flagged: isLate
+            };
+        });
 
-app.post('/api/admin/notice', (req, res) => {
-    if (req.body.notice) {
-        systemNotice = req.body.notice;
-        return res.json({ success: true, message: "Notice successfully broadcasted across store network!" });
+        res.json({
+            employeeList: employeeList,
+            logs: logsPayload,
+            absenceReports: absenceList,
+            currentNotice: activeNotice
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Database read error." });
     }
-    res.status(400).json({ success: false, message: "Notice parameter missing." });
 });
 
-// FIX 2: Fully mapped incoming payload references safely
-app.post(['/api/employees', '/api/admin/register'], (req, res) => {
-    const { id, name, requiredHours, shiftHours, cutoffHour, cutoffMinute } = req.body;
-    
-    if (!id || !name) {
-        return res.status(400).json({ success: false, message: "Registration failed: Missing ID or Name parameters." });
+// 2. BROADCAST NOTICE
+app.post('/api/admin/notice', async (req, res) => {
+    try {
+        if (req.body.notice) {
+            await Notice.findOneAndUpdate({}, { noticeText: req.body.notice }, { upsert: true });
+            return res.json({ success: true, message: "Notice successfully saved to database!" });
+        }
+        res.status(400).json({ success: false, message: "Notice parameter missing." });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Notice database update failed." });
     }
-    
-    const targetId = id.toUpperCase();
-    const hours = parseInt(shiftHours) || parseInt(requiredHours) || 8;
-    
-    employees[targetId] = {
-        id: targetId,
-        name: name,
-        role: "Staff Member",
-        shiftHours: hours,
-        cutoffHour: cutoffHour !== undefined && cutoffHour !== "" ? parseInt(cutoffHour) : 8,
-        cutoffMinute: cutoffMinute !== undefined && cutoffMinute !== "" ? parseInt(cutoffMinute) : 0
-    };
-
-    res.json({ success: true, message: `Profile created for ${name} [${targetId}] successfully!` });
 });
 
-app.get('/api/notice', (req, res) => {
-    res.json({ notice: systemNotice });
+// 3. REGISTER STAFF PROFILE
+app.post(['/api/employees', '/api/admin/register'], async (req, res) => {
+    try {
+        const { id, name, requiredHours, shiftHours, cutoffHour, cutoffMinute } = req.body;
+        
+        if (!id || !name) {
+            return res.status(400).json({ success: false, message: "Missing ID or Name parameters." });
+        }
+        
+        const targetId = id.toUpperCase();
+        const hours = parseInt(shiftHours) || parseInt(requiredHours) || 8;
+
+        const updatedEmployee = await Employee.findOneAndUpdate(
+            { id: targetId },
+            {
+                id: targetId,
+                name: name,
+                role: "Staff Member",
+                shiftHours: hours,
+                cutoffHour: cutoffHour !== undefined && cutoffHour !== "" ? parseInt(cutoffHour) : 8,
+                cutoffMinute: cutoffMinute !== undefined && cutoffMinute !== "" ? parseInt(cutoffMinute) : 0
+            },
+            { upsert: true, new: true }
+        );
+
+        res.json({ success: true, message: `Profile registered for ${updatedEmployee.name} [${targetId}] in MongoDB!` });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Database write error during registration." });
+    }
 });
 
-app.get('/api/attendance/active-count', (req, res) => {
-    const count = Object.values(attendanceLog).filter(log => log.status === 'checked_in').length;
+// 4. NOTICE GETTER FOR HOMEPAGE
+app.get('/api/notice', async (req, res) => {
+    const activeNotice = await getNoticeText();
+    res.json({ notice: activeNotice });
+});
+
+// 5. GET COMPACT ACTIVE COUNT
+app.get('/api/attendance/active-count', async (req, res) => {
+    const count = await AttendanceLog.countDocuments({ status: 'checked_in' });
     res.json({ count });
 });
 
-app.get('/api/attendance/status/:id', (req, res) => {
-    const id = req.params.id.toUpperCase();
-    if (!employees[id]) return res.json({ status: "unregistered" });
-    const currentLog = attendanceLog[id];
-    if (!currentLog) return res.json({ status: "not_checked_in" });
-
-    if (currentLog.status === 'checked_in' && isPastEmployeeCutoff(employees[id])) {
-        attendanceLog[id].status = 'completed';
-        return res.json({ status: "completed" });
-    }
-
-    res.json({
-        status: currentLog.status,
-        name: employees[id].name,
-        checkInTime: currentLog.checkInTimeFormatted,
-        shiftHours: employees[id].shiftHours
-    });
-});
-
-app.post('/api/attendance', (req, res) => {
-    const { employeeId, action, lat, lon, deviceId } = req.body;
-    const id = employeeId.toUpperCase();
-
-    if (!employees[id]) return res.status(400).json({ success: false, message: "ID unregistered." });
-    const currentWorker = employees[id];
-
-    if (!lat || !lon) return res.status(400).json({ success: false, message: "Access Denied: GPS missing." });
-    const distance = calculateDistance(lat, lon, STORE_COORDS.lat, STORE_COORDS.lon);
-    if (distance > MAX_DISTANCE_METERS) {
-        return res.status(403).json({ success: false, message: `Verification Failed: Outside boundaries.` });
-    }
-
-    if (action === 'checkin' && isPastEmployeeCutoff(currentWorker)) {
-        const formattedCutoff = `${String(currentWorker.cutoffHour).padStart(2, '0')}:${String(currentWorker.cutoffMinute).padStart(2, '0')}`;
-        return res.status(403).json({ success: false, message: `Access Refused: Late check-in closed at ${formattedCutoff}.` });
-    }
-
-    if (action === 'checkin') {
-        if (!deviceId) return res.status(400).json({ success: false, message: "Security fingerprint missing." });
-        const fraudDeviceMatch = Object.keys(attendanceLog).find(empId => attendanceLog[empId].deviceId === deviceId && empId !== id);
-        if (fraudDeviceMatch) return res.status(403).json({ success: false, message: "Fraud Protection Activated." });
-    }
-
-    const now = new Date();
-    if (action === 'checkin') {
-        attendanceLog[id] = {
-            status: 'checked_in',
-            deviceId: deviceId, 
-            checkInTimeRaw: now.toISOString(),
-            checkInTimeFormatted: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        return res.json({ success: true, message: `Welcome on shift, ${currentWorker.name}.` });
-    } else if (action === 'checkout') {
-        if (!attendanceLog[id] || attendanceLog[id].status !== 'checked_in') return res.status(400).json({ success: false, message: "No active session." });
+// 6. LIVE SESSION CHECK FOR USERS
+app.get('/api/attendance/status/:id', async (req, res) => {
+    try {
+        const id = req.params.id.toUpperCase();
+        const employee = await Employee.findOne({ id });
         
-        attendanceLog[id].status = 'completed';
-        attendanceLog[id].checkOutTimeRaw = now.toISOString();
-        return res.json({ success: true, message: "Shift finalized." });
+        if (!employee) {
+            return res.json({ status: "unregistered" });
+        }
+
+        const currentLog = await AttendanceLog.findOne({ employeeId: id, status: 'checked_in' });
+        if (!currentLog) {
+            return res.json({ status: "not_checked_in" });
+        }
+
+        if (isPastEmployeeCutoff(employee)) {
+            currentLog.status = 'completed';
+            await currentLog.save();
+            return res.json({ status: "completed" });
+        }
+
+        res.json({
+            status: currentLog.status,
+            name: employee.name,
+            checkInTime: currentLog.checkInTimeFormatted,
+            shiftHours: employee.shiftHours
+        });
+    } catch (err) {
+        res.status(500).json({ status: "error" });
     }
-    res.status(400).json({ success: false, message: "System anomaly." });
 });
 
-app.delete('/api/employees/:id', (req, res) => {
-    const id = req.params.id.toUpperCase();
-    if (employees[id]) {
-        delete employees[id];
-        delete attendanceLog[id]; 
-        return res.json({ success: true, message: "Profile record completely dropped." });
+// 7. SECURE SIGN IN/OUT PROCESSOR
+app.post('/api/attendance', async (req, res) => {
+    try {
+        const { employeeId, action, lat, lon, deviceId } = req.body;
+        const id = employeeId.toUpperCase();
+
+        const employee = await Employee.findOne({ id });
+        if (!employee) return res.status(400).json({ success: false, message: "ID unregistered in database." });
+
+        if (!lat || !lon) return res.status(400).json({ success: false, message: "Access Denied: GPS missing." });
+        const distance = calculateDistance(lat, lon, STORE_COORDS.lat, STORE_COORDS.lon);
+        if (distance > MAX_DISTANCE_METERS) {
+            return res.status(403).json({ success: false, message: `Outside store boundaries.` });
+        }
+
+        if (action === 'checkin' && isPastEmployeeCutoff(employee)) {
+            const formattedCutoff = `${String(employee.cutoffHour).padStart(2, '0')}:${String(employee.cutoffMinute).padStart(2, '0')}`;
+            return res.status(403).json({ success: false, message: `Check-in window closed at ${formattedCutoff}.` });
+        }
+
+        if (action === 'checkin') {
+            if (!deviceId) return res.status(400).json({ success: false, message: "Device fingerprint missing." });
+            const fraudDeviceMatch = await AttendanceLog.findOne({ deviceId: deviceId, status: 'checked_in', employeeId: { $ne: id } });
+            if (fraudDeviceMatch) return res.status(403).json({ success: false, message: "Fraud Protection: Device already active for another staff." });
+        }
+
+        const now = new Date();
+        if (action === 'checkin') {
+            await AttendanceLog.create({
+                employeeId: id,
+                status: 'checked_in',
+                deviceId: deviceId,
+                checkInTimeRaw: now,
+                checkInTimeFormatted: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            return res.json({ success: true, message: `Welcome on shift, ${employee.name}.` });
+        } else if (action === 'checkout') {
+            const activeLog = await AttendanceLog.findOne({ employeeId: id, status: 'checked_in' });
+            if (!activeLog) return res.status(400).json({ success: false, message: "No active session." });
+            
+            activeLog.status = 'completed';
+            activeLog.checkOutTimeRaw = now;
+            await activeLog.save();
+            return res.json({ success: true, message: "Shift finalized safely!" });
+        }
+        res.status(400).json({ success: false, message: "System anomaly." });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Database transaction failed." });
     }
-    res.status(404).json({ success: false, message: "Target ID not found." });
 });
 
-app.post('/api/absence-report', (req, res) => {
-    const { employeeId, reason } = req.body;
-    const id = employeeId.toUpperCase();
-    if (!employees[id]) return res.status(400).json({ success: false, message: "ID unregistered." });
-    
-    const report = {
-        date: new Date().toISOString().split('T')[0],
-        id: id,
-        name: employees[id].name,
-        reason: reason,
-        submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    absenceReports.push(report);
-    res.json({ success: true, message: "Absence ticket filed." });
+// 8. DELETE STAFF MEMBER
+app.delete('/api/employees/:id', async (req, res) => {
+    try {
+        const id = req.params.id.toUpperCase();
+        const deleted = await Employee.findOneAndDelete({ id });
+        if (deleted) {
+            await AttendanceLog.deleteMany({ employeeId: id });
+            return res.json({ success: true, message: "Staff records wiped from database." });
+        }
+        res.status(404).json({ success: false, message: "ID not found." });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Failed to drop staff record." });
+    }
+});
+
+// 9. ABSENCE SUBMISSIONS
+app.post('/api/absence-report', async (req, res) => {
+    try {
+        const { employeeId, reason } = req.body;
+        const id = employeeId.toUpperCase();
+        
+        const employee = await Employee.findOne({ id });
+        if (!employee) return res.status(400).json({ success: false, message: "ID unregistered." });
+        
+        const report = await AbsenceReport.create({
+            date: new Date().toISOString().split('T')[0],
+            employeeId: id,
+            name: employee.name,
+            reason: reason,
+            submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        
+        res.json({ success: true, message: "Absence ticket logged in MongoDB!" });
+    } catch (err) {
+        res.status(500).json({ success: false, message: "Could not log absence ticket." });
+    }
 });
 
 app.listen(PORT, () => {
-    console.log(`[DE CHIS STORES PORTAL ENGINE LIVE ON PORT ${PORT}]`);
+    console.log(`[DE CHIS STORES PORTAL ENGINE LIVE AND DB ATTACHED ON PORT ${PORT}]`);
 });
