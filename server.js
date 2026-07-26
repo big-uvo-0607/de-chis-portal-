@@ -333,14 +333,19 @@ app.post('/api/attendance', async (req, res) => {
             const fraudDeviceMatch = await AttendanceLog.findOne({ deviceId: deviceId, status: 'checked_in', employeeId: { $ne: id } });
             if (fraudDeviceMatch) return res.status(403).json({ success: false, message: "Fraud Protection: Device already active for another staff." });
 
-            await AttendanceLog.create({
+            const newLog = await AttendanceLog.create({
                 employeeId: id,
                 status: 'checked_in',
                 deviceId: deviceId,
                 checkInTimeRaw: now,
                 checkInTimeFormatted: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
-            return res.json({ success: true, message: `Welcome on shift, ${employee.name}.` });
+
+            return res.json({ 
+                success: true, 
+                message: `Welcome on shift, ${employee.name}.`,
+                checkInTimeRaw: newLog.checkInTimeRaw.toISOString() // Added: Sends clean ISO time to avoid NaN:NaN:NaN timer errors
+            });
 
         } else if (action === 'checkout') {
             const activeLog = await AttendanceLog.findOne({ employeeId: id, status: 'checked_in' });
