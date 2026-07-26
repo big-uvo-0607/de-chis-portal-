@@ -315,7 +315,7 @@
         <h3 style="color:#c62828; margin-bottom: 15px; font-weight: 700;">File Official Absence Ticket</h3>
         <input type="text" id="absentEmpId" placeholder="Your Employee ID">
         <textarea id="absenceReason" rows="3" placeholder="Provide details regarding your absence request..."></textarea>
-        <button style="background:#c62828; box-shadow: 0 4px 12px rgba(198,40,40,0.2);" onclick="submitAbsence()">Submit Absence Ticket</button>
+        <button id="submitAbsenceBtn" style="background:#c62828; box-shadow: 0 4px 12px rgba(198,40,40,0.2);" onclick="submitAbsence()">Submit Absence Ticket</button>
         <div id="absenceAlert" style="margin-top:15px; display:none; padding:12px; border-radius:10px; font-weight:600;"></div>
     </div>
 
@@ -324,19 +324,23 @@
         <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 20px; font-weight: 500;">Direct Database Deletion Engine</p>
         
         <label for="deleteEmpId">Target Profile Assignment ID</label>
-        <input type="text" id="deleteEmpId" placeholder="e.g. EMP004" style="border-color: rgba(230, 57, 70, 0.3);">
+        <input type="text" id="deleteEmpId" placeholder="e.g. EMP004" style="border-color: rgba(230, 50, 70, 0.3);">
         
-        <button style="background: #e63946; box-shadow: 0 4px 14px rgba(230, 50, 70, 0.25);" onclick="deleteEmployeeProfile()">
+        <button id="deleteBtn" style="background: #e63946; box-shadow: 0 4px 14px rgba(230, 50, 70, 0.25);" onclick="deleteEmployeeProfile()">
             💥 Terminate & Delete Profile Record
         </button>
         <div id="adminAlert"></div>
     </div>
 
     <script>
-        let workTimerInterval = null; 
+        let workTimerInterval = null;
+        let liveClockInterval = null;
+        let keepAliveTimer = null;
         let isProcessingAttendance = false;
+        let isSubmittingAbsence = false;
+        let isDeletingProfile = false;
 
-        /* CLIENT ANTI-CRASH SAFETY NETS */
+        /* CLIENT ANTI-CRASH SAFETY NETS & LEAK CLEANUP */
         window.addEventListener('error', function(e) {
             console.error("Client safety caught exception:", e.error);
             resetProcessingState();
@@ -347,12 +351,26 @@
             resetProcessingState();
         });
 
+        window.addEventListener('beforeunload', () => {
+            if (workTimerInterval) clearInterval(workTimerInterval);
+            if (liveClockInterval) clearInterval(liveClockInterval);
+            if (keepAliveTimer) clearInterval(keepAliveTimer);
+        });
+
         function resetProcessingState() {
             isProcessingAttendance = false;
+            isSubmittingAbsence = false;
+            isDeletingProfile = false;
+            
             const inBtn = document.getElementById('checkInBtn');
             const outBtn = document.getElementById('checkOutBtn');
-            if(inBtn) inBtn.disabled = false;
-            if(outBtn) outBtn.disabled = false;
+            const absenceBtn = document.getElementById('submitAbsenceBtn');
+            const deleteBtn = document.getElementById('deleteBtn');
+
+            if (inBtn) inBtn.disabled = false;
+            if (outBtn) outBtn.disabled = false;
+            if (absenceBtn) absenceBtn.disabled = false;
+            if (deleteBtn) deleteBtn.disabled = false;
         }
 
         async function fetchWithTimeout(resource, options = {}) {
@@ -392,11 +410,16 @@
         }
 
         function startLiveClock() {
-            setInterval(() => {
+            if (liveClockInterval) clearInterval(liveClockInterval);
+            liveClockInterval = setInterval(() => {
                 const now = new Date();
-                document.getElementById('liveClock').innerText = now.toLocaleTimeString();
-                const options = { weekday: 'short', month: 'short', day: 'numeric' };
-                document.getElementById('liveDate').innerText = now.toLocaleDateString('en-US', options);
+                const clockEl = document.getElementById('liveClock');
+                const dateEl = document.getElementById('liveDate');
+                if (clockEl) clockEl.innerText = now.toLocaleTimeString();
+                if (dateEl) {
+                    const options = { weekday: 'short', month: 'short', day: 'numeric' };
+                    dateEl.innerText = now.toLocaleDateString('en-US', options);
+                }
             }, 1000);
         }
 
@@ -404,9 +427,11 @@
             try {
                 const res = await fetchWithTimeout('/api/attendance/active-count', { timeout: 4000 });
                 const data = await res.json();
-                document.getElementById('activeStaffCount').innerText = `${data.count || 0} Staff`;
+                const countEl = document.getElementById('activeStaffCount');
+                if (countEl) countEl.innerText = `${data.count || 0} Staff`;
             } catch (err) {
-                document.getElementById('activeStaffCount').innerText = "Offline";
+                const countEl = document.getElementById('activeStaffCount');
+                if (countEl) countEl.innerText = "Offline";
             }
         }
 
@@ -440,9 +465,11 @@
         }
 
         async function deleteEmployeeProfile() {
+            if (isDeletingProfile) return;
             const inputField = document.getElementById('deleteEmpId');
             const id = inputField.value.trim();
             const alertBox = document.getElementById('adminAlert');
+            const deleteBtn = document.getElementById('deleteBtn');
             
             if(!id) {
                 inputField.classList.add('shake-error');
@@ -453,6 +480,9 @@
             if(!confirm(`Are you absolutely sure you want to permanently erase ${id} from DE Chis Stores? This cannot be undone.`)) {
                 return;
             }
+
+            isDeletingProfile = true;
+            if (deleteBtn) deleteBtn.disabled = true;
 
             try {
                 const res = await fetchWithTimeout(`/api/employees/${id}`, { method: 'DELETE', timeout: 6000 });
@@ -472,6 +502,9 @@
                 alertBox.innerText = "Error: Backend endpoint /api/employees/:employeeId is missing or unreachable.";
                 alertBox.className = "error";
                 alertBox.style.display = "block";
+            } finally {
+                isDeletingProfile = false;
+                if (deleteBtn) deleteBtn.disabled = false;
             }
         }
 
@@ -488,15 +521,15 @@
             const noteDisplay = document.getElementById('shiftRequirementNote');
             const trackerBox = document.getElementById('shiftTrackerBox');
             
-            noteDisplay.innerText = `⚠️ Shift Rule: You must complete your ${shiftHours}-hour shift before leaving.`;
-            trackerBox.style.display = "block";
+            if (noteDisplay) noteDisplay.innerText = `⚠️ Shift Rule: You must complete your ${shiftHours}-hour shift before leaving.`;
+            if (trackerBox) trackerBox.style.display = "block";
             
             workTimerInterval = setInterval(() => {
                 const now = new Date();
                 const differenceInMs = now - checkInDate;
 
                 if (isNaN(differenceInMs) || differenceInMs < 0) {
-                    timerDisplay.innerText = "00:00:00";
+                    if (timerDisplay) timerDisplay.innerText = "00:00:00";
                     return;
                 }
                 
@@ -505,10 +538,12 @@
                 const minutes = Math.floor((totalSeconds % 3600) / 60);
                 const seconds = totalSeconds % 60;
                 
-                timerDisplay.innerText = 
-                    String(hours).padStart(2, '0') + ":" + 
-                    String(minutes).padStart(2, '0') + ":" + 
-                    String(seconds).padStart(2, '0');
+                if (timerDisplay) {
+                    timerDisplay.innerText = 
+                        String(hours).padStart(2, '0') + ":" + 
+                        String(minutes).padStart(2, '0') + ":" + 
+                        String(seconds).padStart(2, '0');
+                }
             }, 1000);
         }
 
@@ -538,35 +573,37 @@
                 const welcomeMessage = document.getElementById('welcomeMessage');
                 const trackerBox = document.getElementById('shiftTrackerBox');
 
-                checkInBtn.style.display = "none";
-                checkOutBtn.style.display = "none";
-                welcomeMessage.style.display = "none";
+                if (checkInBtn) checkInBtn.style.display = "none";
+                if (checkOutBtn) checkOutBtn.style.display = "none";
+                if (welcomeMessage) welcomeMessage.style.display = "none";
 
                 if (data.status === "unregistered") {
                     showAlert("Access Denied: ID not registered inside store database.", "error");
-                    trackerBox.style.display = "none";
+                    if (trackerBox) trackerBox.style.display = "none";
                     if (workTimerInterval) clearInterval(workTimerInterval);
                 } 
                 else if (data.status === "not_checked_in") {
-                    checkInBtn.style.display = "block";
+                    if (checkInBtn) checkInBtn.style.display = "block";
                     if (data.resetNote) {
                         showAlert(data.resetNote, "success");
                     } else {
                         showAlert("Profile authenticated successfully. Ready to record session.", "success");
                     }
-                    trackerBox.style.display = "none";
+                    if (trackerBox) trackerBox.style.display = "none";
                     if (workTimerInterval) clearInterval(workTimerInterval);
                 } 
                 else if (data.status === "checked_in") {
-                    welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
-                    welcomeMessage.style.display = "block";
-                    checkOutBtn.style.display = "block";
+                    if (welcomeMessage) {
+                        welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
+                        welcomeMessage.style.display = "block";
+                    }
+                    if (checkOutBtn) checkOutBtn.style.display = "block";
                     showAlert(`Active shift log started today at ${data.checkInTime}.`, "success");
                     startWorkTimer(data.checkInTimeRaw, data.shiftHours || 10);
                 } 
                 else if (data.status === "completed" || data.status === "already_checked_in") {
                     showAlert("🚫 You have completed your shift actions for today. Portal will refresh tomorrow at midnight.", "error");
-                    trackerBox.style.display = "none";
+                    if (trackerBox) trackerBox.style.display = "none";
                     if (workTimerInterval) clearInterval(workTimerInterval);
                 }
             } catch (err) {
@@ -629,11 +666,17 @@
         }
 
         async function submitAbsence() {
+            if (isSubmittingAbsence) return;
+
             const employeeId = document.getElementById('absentEmpId').value.trim();
             const reason = document.getElementById('absenceReason').value.trim();
             const box = document.getElementById('absenceAlert');
+            const submitBtn = document.getElementById('submitAbsenceBtn');
             
             if(!employeeId || !reason) return alert("Fill in your ID and reason!");
+
+            isSubmittingAbsence = true;
+            if (submitBtn) submitBtn.disabled = true;
 
             try {
                 const res = await fetchWithTimeout('/api/absence-report', {
@@ -657,6 +700,9 @@
                 box.innerText = "Network Error: Couldn't file your absence ticket.";
                 box.className = "error";
                 box.style.display = "block";
+            } finally {
+                isSubmittingAbsence = false;
+                if (submitBtn) submitBtn.disabled = false;
             }
         }
 
@@ -671,15 +717,27 @@
             try {
                 const res = await fetchWithTimeout('/api/notice', { timeout: 4000 });
                 const data = await res.json();
+                const noticeBanner = document.getElementById('noticeBanner');
+                const noticeContent = document.getElementById('noticeContent');
+                
                 if (data.notice && data.notice !== "Welcome to DE Chis Stores Portal!") {
-                    document.getElementById('noticeContent').innerText = data.notice;
-                    document.getElementById('noticeBanner').style.display = 'block';
+                    if (noticeContent) noticeContent.innerText = data.notice;
+                    if (noticeBanner) noticeBanner.style.display = 'block';
                 } else {
-                    document.getElementById('noticeBanner').style.display = 'none';
+                    if (noticeBanner) noticeBanner.style.display = 'none';
                 }
             } catch (err) {
                 console.log("Notice board core sleeping.");
             }
+        }
+
+        /* BACKGROUND KEEP-ALIVE PULSE ENGINE */
+        function keepAliveAndSync() {
+            if (keepAliveTimer) clearInterval(keepAliveTimer);
+            keepAliveTimer = setInterval(() => {
+                checkStoreAnnouncements();
+                updateActiveStaffCount();
+            }, 45000); // Pulse every 45s to keep cloud server active
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -687,6 +745,7 @@
             startLiveClock();
             checkStoreAnnouncements();
             updateActiveStaffCount();
+            keepAliveAndSync();
         });
     </script>
 </body>

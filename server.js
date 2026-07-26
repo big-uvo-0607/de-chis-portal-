@@ -1,10 +1,12 @@
 const express = require('express');
 const path = require('path');
-const mongoose = require('mongoose'); // Import Mongoose
+const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(express.json());
+// Body parsing with size limits to prevent payload abuse
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ========================================================
 // GLOBAL CRASH SHIELDS (PREVENT SERVER CRASHES)
@@ -30,46 +32,57 @@ mongoose.connect(MONGO_URI)
 // DATABASE SCHEMAS & MODELS
 // ========================================================
 const EmployeeSchema = new mongoose.Schema({
-    id: { type: String, required: true, unique: true, uppercase: true },
-    name: { type: String, required: true },
-    role: { type: String, default: "Staff Member" },
+    id: { type: String, required: true, unique: true, uppercase: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    role: { type: String, default: "Staff Member", trim: true },
     shiftHours: { type: Number, default: 8 },
     cutoffHour: { type: Number, default: 8 },
     cutoffMinute: { type: Number, default: 0 }
-});
+}, { timestamps: true });
+
 const Employee = mongoose.model('Employee', EmployeeSchema);
 
 const AttendanceLogSchema = new mongoose.Schema({
-    employeeId: { type: String, required: true, uppercase: true },
-    status: { type: String, default: 'checked_in' }, // 'checked_in', 'completed', or 'LEFT'
-    deviceId: { type: String, required: true },
+    employeeId: { type: String, required: true, uppercase: true, trim: true },
+    status: { type: String, default: 'checked_in', enum: ['checked_in', 'completed', 'LEFT'] },
+    deviceId: { type: String, required: true, trim: true },
     checkInTimeRaw: { type: Date, default: Date.now },
     checkInTimeFormatted: { type: String, required: true },
     checkOutTimeRaw: { type: Date }
-});
+}, { timestamps: true });
+
 const AttendanceLog = mongoose.model('AttendanceLog', AttendanceLogSchema);
 
 const AbsenceReportSchema = new mongoose.Schema({
     date: { type: String, required: true },
-    employeeId: { type: String, required: true, uppercase: true },
-    name: { type: String, required: true },
-    reason: { type: String, required: true },
+    employeeId: { type: String, required: true, uppercase: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    reason: { type: String, required: true, trim: true },
     submittedAt: { type: String, required: true }
-});
+}, { timestamps: true });
+
 const AbsenceReport = mongoose.model('AbsenceReport', AbsenceReportSchema);
 
 const NoticeSchema = new mongoose.Schema({
     noticeText: { type: String, default: "Welcome to DE CHIS STORES Portal! Please check in according to your designated shift schedule." }
 });
+
 const Notice = mongoose.model('Notice', NoticeSchema);
 
 // Helper function to get or initialize the notice
 async function getNoticeText() {
-    let noticeObj = await Notice.findOne();
-    if (!noticeObj) {
-        noticeObj = await Notice.create({ noticeText: "Welcome to DE CHIS STORES Portal! Please check in according to your designated shift schedule." });
+    try {
+        let noticeObj = await Notice.findOne();
+        if (!noticeObj) {
+            noticeObj = await Notice.create({ 
+                noticeText: "Welcome to DE CHIS STORES Portal! Please check in according to your designated shift schedule." 
+            });
+        }
+        return noticeObj.noticeText;
+    } catch (err) {
+        console.error("Notice retrieval error:", err);
+        return "Welcome to DE CHIS STORES Portal!";
     }
-    return noticeObj.noticeText;
 }
 
 // ========================================================
@@ -93,14 +106,15 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 function isPastEmployeeCutoff(employee) {
+    if (!employee) return false;
     const now = new Date();
     const currentTotalMinutes = (now.getHours() * 60) + now.getMinutes();
-    const cutoffTotalMinutes = (employee.cutoffHour * 60) + employee.cutoffMinute;
+    const cutoffTotalMinutes = ((employee.cutoffHour || 8) * 60) + (employee.cutoffMinute || 0);
     return currentTotalMinutes >= cutoffTotalMinutes;
 }
 
 // ========================================================
-// FOLDER PATH CORRECTION
+// STATIC FILE & ROUTE HANDLERS
 // ========================================================
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -118,20 +132,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname)));
 
 // ========================================================
-// API ROUTERS / ENDPOINTS (CONVERTED TO MONGOOSE)
+// API ROUTERS / ENDPOINTS
 // ========================================================
 
 // 1. ADMIN DATA PANEL FEED
 app.get('/api/admin/data', async (req, res) => {
     try {
-        const employeeList = await Employee.find({});
-        const activeLogs = await AttendanceLog.find({});
-        const absenceList = await AbsenceReport.find({});
+        const employeeList = await Employee.find({}).lean();
+        const activeLogs = await AttendanceLog.find({}).sort({ checkInTimeRaw: -1 }).lean();
+        const absenceList = await AbsenceReport.find({}).sort({ createdAt: -1 }).lean();
         const activeNotice = await getNoticeText();
 
         const logsPayload = activeLogs.map(log => {
             const emp = employeeList.find(e => e.id === log.employeeId) || { name: "Unknown Staff", shiftHours: 8 };
-            const isLate = log.checkInTimeRaw && isPastEmployeeCutoff(emp);
+            const isLate = log.checkInTimeRaw ? isPastEmployeeCutoff(emp) : false;
             const rawDate = log.checkInTimeRaw ? new Date(log.checkInTimeRaw) : new Date();
 
             let checkOutDisplay = null;
@@ -159,6 +173,7 @@ app.get('/api/admin/data', async (req, res) => {
             currentNotice: activeNotice
         });
     } catch (err) {
+        console.error("Admin data fetch failed:", err);
         res.status(500).json({ success: false, message: "Database read error." });
     }
 });
@@ -166,12 +181,14 @@ app.get('/api/admin/data', async (req, res) => {
 // 2. BROADCAST NOTICE
 app.post('/api/admin/notice', async (req, res) => {
     try {
-        if (req.body.notice) {
-            await Notice.findOneAndUpdate({}, { noticeText: req.body.notice }, { upsert: true });
+        const noticeText = req.body.notice ? req.body.notice.trim() : null;
+        if (noticeText) {
+            await Notice.findOneAndUpdate({}, { noticeText }, { upsert: true, new: true });
             return res.json({ success: true, message: "Notice successfully saved to database!" });
         }
         res.status(400).json({ success: false, message: "Notice parameter missing." });
     } catch (err) {
+        console.error("Notice update failed:", err);
         res.status(500).json({ success: false, message: "Notice database update failed." });
     }
 });
@@ -181,28 +198,32 @@ app.post(['/api/employees', '/api/admin/register'], async (req, res) => {
     try {
         const { id, name, requiredHours, shiftHours, cutoffHour, cutoffMinute } = req.body;
         
-        if (!id || !name) {
+        if (!id || !name || !id.trim() || !name.trim()) {
             return res.status(400).json({ success: false, message: "Missing ID or Name parameters." });
         }
         
-        const targetId = id.toUpperCase();
+        const targetId = id.trim().toUpperCase();
         const hours = parseInt(shiftHours) || parseInt(requiredHours) || 8;
 
         const updatedEmployee = await Employee.findOneAndUpdate(
             { id: targetId },
             {
                 id: targetId,
-                name: name,
+                name: name.trim(),
                 role: "Staff Member",
                 shiftHours: hours,
                 cutoffHour: cutoffHour !== undefined && cutoffHour !== "" ? parseInt(cutoffHour) : 8,
                 cutoffMinute: cutoffMinute !== undefined && cutoffMinute !== "" ? parseInt(cutoffMinute) : 0
             },
-            { upsert: true, new: true }
+            { upsert: true, new: true, runValidators: true }
         );
 
-        res.json({ success: true, message: `Profile registered for ${updatedEmployee.name} [${targetId}] in MongoDB!` });
+        res.json({ 
+            success: true, 
+            message: `Profile registered for ${updatedEmployee.name} [${targetId}] in MongoDB!` 
+        });
     } catch (err) {
+        console.error("Registration error:", err);
         res.status(500).json({ success: false, message: "Database write error during registration." });
     }
 });
@@ -230,7 +251,11 @@ app.get('/api/attendance/active-count', async (req, res) => {
 // 6. LIVE SESSION CHECK FOR USERS
 app.get('/api/attendance/status/:id', async (req, res) => {
     try {
-        const id = req.params.id.toUpperCase();
+        if (!req.params.id) {
+            return res.status(400).json({ status: "error", message: "ID parameter missing" });
+        }
+
+        const id = req.params.id.trim().toUpperCase();
         const employee = await Employee.findOne({ id });
         
         if (!employee) {
@@ -290,6 +315,7 @@ app.get('/api/attendance/status/:id', async (req, res) => {
         res.json({ status: "not_checked_in", name: employee.name });
 
     } catch (err) {
+        console.error("Status query error:", err);
         res.status(500).json({ status: "error" });
     }
 });
@@ -298,13 +324,24 @@ app.get('/api/attendance/status/:id', async (req, res) => {
 app.post('/api/attendance', async (req, res) => {
     try {
         const { employeeId, action, lat, lon, deviceId } = req.body;
-        const id = employeeId.toUpperCase();
+        
+        if (!employeeId || !employeeId.trim()) {
+            return res.status(400).json({ success: false, message: "Employee ID is required." });
+        }
+
+        const id = employeeId.trim().toUpperCase();
 
         const employee = await Employee.findOne({ id });
         if (!employee) return res.status(400).json({ success: false, message: "ID unregistered in database." });
 
-        if (!lat || !lon) return res.status(400).json({ success: false, message: "Access Denied: GPS missing." });
-        const distance = calculateDistance(lat, lon, STORE_COORDS.lat, STORE_COORDS.lon);
+        const parsedLat = parseFloat(lat);
+        const parsedLon = parseFloat(lon);
+
+        if (isNaN(parsedLat) || isNaN(parsedLon)) {
+            return res.status(400).json({ success: false, message: "Access Denied: GPS coordinate missing or invalid." });
+        }
+
+        const distance = calculateDistance(parsedLat, parsedLon, STORE_COORDS.lat, STORE_COORDS.lon);
         if (distance > MAX_DISTANCE_METERS) {
             return res.status(403).json({ success: false, message: `Outside store boundaries.` });
         }
@@ -325,18 +362,29 @@ app.post('/api/attendance', async (req, res) => {
             }
 
             if (isPastEmployeeCutoff(employee)) {
-                const formattedCutoff = `${String(employee.cutoffHour).padStart(2, '0')}:${String(employee.cutoffMinute).padStart(2, '0')}`;
+                const formattedCutoff = `${String(employee.cutoffHour || 8).padStart(2, '0')}:${String(employee.cutoffMinute || 0).padStart(2, '0')}`;
                 return res.status(403).json({ success: false, message: `Check-in window closed at ${formattedCutoff}.` });
             }
 
-            if (!deviceId) return res.status(400).json({ success: false, message: "Device fingerprint missing." });
-            const fraudDeviceMatch = await AttendanceLog.findOne({ deviceId: deviceId, status: 'checked_in', employeeId: { $ne: id } });
-            if (fraudDeviceMatch) return res.status(403).json({ success: false, message: "Fraud Protection: Device already active for another staff." });
+            if (!deviceId || !deviceId.trim()) {
+                return res.status(400).json({ success: false, message: "Device fingerprint missing." });
+            }
+
+            const cleanDeviceId = deviceId.trim();
+            const fraudDeviceMatch = await AttendanceLog.findOne({ 
+                deviceId: cleanDeviceId, 
+                status: 'checked_in', 
+                employeeId: { $ne: id } 
+            });
+
+            if (fraudDeviceMatch) {
+                return res.status(403).json({ success: false, message: "Fraud Protection: Device already active for another staff." });
+            }
 
             const newLog = await AttendanceLog.create({
                 employeeId: id,
                 status: 'checked_in',
-                deviceId: deviceId,
+                deviceId: cleanDeviceId,
                 checkInTimeRaw: now,
                 checkInTimeFormatted: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
@@ -344,7 +392,7 @@ app.post('/api/attendance', async (req, res) => {
             return res.json({ 
                 success: true, 
                 message: `Welcome on shift, ${employee.name}.`,
-                checkInTimeRaw: newLog.checkInTimeRaw.toISOString() // Added: Sends clean ISO time to avoid NaN:NaN:NaN timer errors
+                checkInTimeRaw: newLog.checkInTimeRaw.toISOString()
             });
 
         } else if (action === 'checkout') {
@@ -357,8 +405,9 @@ app.post('/api/attendance', async (req, res) => {
             return res.json({ success: true, message: "Shift finalized safely!" });
         }
 
-        res.status(400).json({ success: false, message: "System anomaly." });
+        res.status(400).json({ success: false, message: "System anomaly: Unrecognized action." });
     } catch (err) {
+        console.error("Attendance transaction error:", err);
         res.status(500).json({ success: false, message: "Database transaction failed." });
     }
 });
@@ -366,14 +415,21 @@ app.post('/api/attendance', async (req, res) => {
 // 8. DELETE STAFF MEMBER
 app.delete('/api/employees/:id', async (req, res) => {
     try {
-        const id = req.params.id.toUpperCase();
+        if (!req.params.id) {
+            return res.status(400).json({ success: false, message: "ID parameter required." });
+        }
+
+        const id = req.params.id.trim().toUpperCase();
         const deleted = await Employee.findOneAndDelete({ id });
+
         if (deleted) {
             await AttendanceLog.deleteMany({ employeeId: id });
+            await AbsenceReport.deleteMany({ employeeId: id });
             return res.json({ success: true, message: "Staff records wiped from database." });
         }
         res.status(404).json({ success: false, message: "ID not found." });
     } catch (err) {
+        console.error("Delete employee error:", err);
         res.status(500).json({ success: false, message: "Failed to drop staff record." });
     }
 });
@@ -382,21 +438,27 @@ app.delete('/api/employees/:id', async (req, res) => {
 app.post('/api/absence-report', async (req, res) => {
     try {
         const { employeeId, reason } = req.body;
-        const id = employeeId.toUpperCase();
+        
+        if (!employeeId || !reason || !employeeId.trim() || !reason.trim()) {
+            return res.status(400).json({ success: false, message: "Employee ID and reason are required." });
+        }
+
+        const id = employeeId.trim().toUpperCase();
         
         const employee = await Employee.findOne({ id });
         if (!employee) return res.status(400).json({ success: false, message: "ID unregistered." });
         
-        const report = await AbsenceReport.create({
+        await AbsenceReport.create({
             date: new Date().toISOString().split('T')[0],
             employeeId: id,
             name: employee.name,
-            reason: reason,
+            reason: reason.trim(),
             submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
         
         res.json({ success: true, message: "Absence ticket logged in MongoDB!" });
     } catch (err) {
+        console.error("Absence logging error:", err);
         res.status(500).json({ success: false, message: "Could not log absence ticket." });
     }
 });
@@ -405,9 +467,11 @@ app.post('/api/absence-report', async (req, res) => {
 // FREE HOSTING KEEP-ALIVE SYSTEM
 // ========================================================
 setInterval(() => {
-    // Non-blocking pulse to maintain server warm status
-    AttendanceLog.countDocuments({ status: 'checked_in' }).exec().catch(() => {});
-}, 10 * 60 * 1000);
+    // Non-blocking ping to maintain database connection and warm instance
+    if (mongoose.connection.readyState === 1) {
+        AttendanceLog.estimatedDocumentCount().catch(() => {});
+    }
+}, 5 * 60 * 1000); // 5-minute interval
 
 app.listen(PORT, () => {
     console.log(`[DE CHIS STORES PORTAL ENGINE LIVE AND DB ATTACHED ON PORT ${PORT}]`);
