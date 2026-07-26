@@ -7,6 +7,17 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 
 // ========================================================
+// GLOBAL CRASH SHIELDS (PREVENT SERVER CRASHES)
+// ========================================================
+process.on('uncaughtException', (err) => {
+    console.error('❌ [CRITICAL UNCAUGHT EXCEPTION]:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ [UNHANDLED PROMISE REJECTION]:', reason);
+});
+
+// ========================================================
 // MONGODB CONNECTION SETUP
 // ========================================================
 const MONGO_URI = process.env.MONGODB_URI || "your_fallback_mongodb_connection_string_here";
@@ -30,7 +41,7 @@ const Employee = mongoose.model('Employee', EmployeeSchema);
 
 const AttendanceLogSchema = new mongoose.Schema({
     employeeId: { type: String, required: true, uppercase: true },
-    status: { type: String, default: 'checked_in' }, // 'checked_in' or 'completed'
+    status: { type: String, default: 'checked_in' }, // 'checked_in', 'completed', or 'LEFT'
     deviceId: { type: String, required: true },
     checkInTimeRaw: { type: Date, default: Date.now },
     checkInTimeFormatted: { type: String, required: true },
@@ -65,7 +76,7 @@ async function getNoticeText() {
 // SECURE VALIDATION ENGINES
 // ========================================================
 const STORE_COORDS = { lat: 9.852923, lon: 8.852990 }; 
-const MAX_DISTANCE_METERS = 100; 
+const MAX_DISTANCE_METERS = 300; 
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3; 
@@ -123,12 +134,19 @@ app.get('/api/admin/data', async (req, res) => {
             const isLate = log.checkInTimeRaw && isPastEmployeeCutoff(emp);
             const rawDate = log.checkInTimeRaw ? new Date(log.checkInTimeRaw) : new Date();
 
+            let checkOutDisplay = null;
+            if (log.status === 'completed') {
+                checkOutDisplay = 'Finalized';
+            } else if (log.status === 'LEFT') {
+                checkOutDisplay = 'LEFT';
+            }
+
             return {
                 date: rawDate.toISOString().split('T')[0],
                 id: log.employeeId,
                 name: emp.name,
                 checkIn: log.checkInTimeFormatted || '--:--',
-                checkOut: log.status === 'completed' ? 'Finalized' : null,
+                checkOut: checkOutDisplay,
                 hoursWorked: emp.shiftHours || 8,
                 flagged: isLate
             };
@@ -191,14 +209,22 @@ app.post(['/api/employees', '/api/admin/register'], async (req, res) => {
 
 // 4. NOTICE GETTER FOR HOMEPAGE
 app.get('/api/notice', async (req, res) => {
-    const activeNotice = await getNoticeText();
-    res.json({ notice: activeNotice });
+    try {
+        const activeNotice = await getNoticeText();
+        res.json({ notice: activeNotice });
+    } catch (err) {
+        res.json({ notice: "Welcome to DE CHIS STORES Portal!" });
+    }
 });
 
 // 5. GET COMPACT ACTIVE COUNT
 app.get('/api/attendance/active-count', async (req, res) => {
-    const count = await AttendanceLog.countDocuments({ status: 'checked_in' });
-    res.json({ count });
+    try {
+        const count = await AttendanceLog.countDocuments({ status: 'checked_in' });
+        res.json({ count });
+    } catch (err) {
+        res.json({ count: 0 });
+    }
 });
 
 // 6. LIVE SESSION CHECK FOR USERS
@@ -211,23 +237,58 @@ app.get('/api/attendance/status/:id', async (req, res) => {
             return res.json({ status: "unregistered" });
         }
 
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+        // Check for an open shift
         const currentLog = await AttendanceLog.findOne({ employeeId: id, status: 'checked_in' });
-        if (!currentLog) {
-            return res.json({ status: "not_checked_in" });
+
+        if (currentLog) {
+            const checkInDate = new Date(currentLog.checkInTimeRaw);
+            
+            // IF SHIFT IS FROM A PREVIOUS DAY (FORGOTTEN CLOCK-OUT)
+            if (checkInDate < startOfToday) {
+                currentLog.status = 'LEFT';
+                currentLog.checkOutTimeRaw = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate(), 23, 59, 59);
+                await currentLog.save();
+
+                // Check if they already checked in today after reset
+                const todayCompleted = await AttendanceLog.findOne({
+                    employeeId: id,
+                    checkInTimeRaw: { $gte: startOfToday, $lte: endOfToday }
+                });
+
+                if (todayCompleted) {
+                    return res.json({ status: "completed" });
+                }
+
+                return res.json({ status: "not_checked_in", name: employee.name });
+            }
+
+            // Normal active shift for today
+            return res.json({
+                status: currentLog.status,
+                name: employee.name,
+                checkInTime: currentLog.checkInTimeFormatted,
+                checkInTimeRaw: currentLog.checkInTimeRaw ? currentLog.checkInTimeRaw.toISOString() : new Date().toISOString(),
+                shiftHours: employee.shiftHours
+            });
         }
 
-        if (isPastEmployeeCutoff(employee)) {
-            currentLog.status = 'completed';
-            await currentLog.save();
+        // Check if already completed a shift today
+        const completedToday = await AttendanceLog.findOne({
+            employeeId: id,
+            checkInTimeRaw: { $gte: startOfToday, $lte: endOfToday },
+            status: { $in: ['completed', 'LEFT'] }
+        });
+
+        if (completedToday) {
             return res.json({ status: "completed" });
         }
 
-        res.json({
-            status: currentLog.status,
-            name: employee.name,
-            checkInTime: currentLog.checkInTimeFormatted,
-            shiftHours: employee.shiftHours
-        });
+        res.json({ status: "not_checked_in", name: employee.name });
+
     } catch (err) {
         res.status(500).json({ status: "error" });
     }
@@ -248,19 +309,30 @@ app.post('/api/attendance', async (req, res) => {
             return res.status(403).json({ success: false, message: `Outside store boundaries.` });
         }
 
-        if (action === 'checkin' && isPastEmployeeCutoff(employee)) {
-            const formattedCutoff = `${String(employee.cutoffHour).padStart(2, '0')}:${String(employee.cutoffMinute).padStart(2, '0')}`;
-            return res.status(403).json({ success: false, message: `Check-in window closed at ${formattedCutoff}.` });
-        }
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
         if (action === 'checkin') {
+            // One check-in per day restriction
+            const existingToday = await AttendanceLog.findOne({
+                employeeId: id,
+                checkInTimeRaw: { $gte: startOfToday, $lte: endOfToday }
+            });
+
+            if (existingToday) {
+                return res.status(400).json({ success: false, message: "You have already checked in today. Please return tomorrow!" });
+            }
+
+            if (isPastEmployeeCutoff(employee)) {
+                const formattedCutoff = `${String(employee.cutoffHour).padStart(2, '0')}:${String(employee.cutoffMinute).padStart(2, '0')}`;
+                return res.status(403).json({ success: false, message: `Check-in window closed at ${formattedCutoff}.` });
+            }
+
             if (!deviceId) return res.status(400).json({ success: false, message: "Device fingerprint missing." });
             const fraudDeviceMatch = await AttendanceLog.findOne({ deviceId: deviceId, status: 'checked_in', employeeId: { $ne: id } });
             if (fraudDeviceMatch) return res.status(403).json({ success: false, message: "Fraud Protection: Device already active for another staff." });
-        }
 
-        const now = new Date();
-        if (action === 'checkin') {
             await AttendanceLog.create({
                 employeeId: id,
                 status: 'checked_in',
@@ -269,6 +341,7 @@ app.post('/api/attendance', async (req, res) => {
                 checkInTimeFormatted: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
             return res.json({ success: true, message: `Welcome on shift, ${employee.name}.` });
+
         } else if (action === 'checkout') {
             const activeLog = await AttendanceLog.findOne({ employeeId: id, status: 'checked_in' });
             if (!activeLog) return res.status(400).json({ success: false, message: "No active session." });
@@ -278,6 +351,7 @@ app.post('/api/attendance', async (req, res) => {
             await activeLog.save();
             return res.json({ success: true, message: "Shift finalized safely!" });
         }
+
         res.status(400).json({ success: false, message: "System anomaly." });
     } catch (err) {
         res.status(500).json({ success: false, message: "Database transaction failed." });
@@ -321,6 +395,14 @@ app.post('/api/absence-report', async (req, res) => {
         res.status(500).json({ success: false, message: "Could not log absence ticket." });
     }
 });
+
+// ========================================================
+// FREE HOSTING KEEP-ALIVE SYSTEM
+// ========================================================
+setInterval(() => {
+    // Non-blocking pulse to maintain server warm status
+    AttendanceLog.countDocuments({ status: 'checked_in' }).exec().catch(() => {});
+}, 10 * 60 * 1000);
 
 app.listen(PORT, () => {
     console.log(`[DE CHIS STORES PORTAL ENGINE LIVE AND DB ATTACHED ON PORT ${PORT}]`);

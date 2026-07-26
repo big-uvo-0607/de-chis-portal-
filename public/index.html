@@ -159,9 +159,7 @@
             outline: none; border-color: #1a3a5f; background: var(--input-bg);
             box-shadow: 0 0 0 4px rgba(26, 58, 95, 0.12);
         }
-        textarea {
-            resize: vertical;
-        }
+        textarea { resize: vertical; }
 
         .shake-error {
             animation: shake 0.4s ease;
@@ -177,7 +175,6 @@
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
-        /* Prevent layout spam clicking visually */
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -329,7 +326,7 @@
         <label for="deleteEmpId">Target Profile Assignment ID</label>
         <input type="text" id="deleteEmpId" placeholder="e.g. EMP004" style="border-color: rgba(230, 57, 70, 0.3);">
         
-        <button style="background: #e63946; box-shadow: 0 4px 14px rgba(230, 57, 70, 0.25);" onclick="deleteEmployeeProfile()">
+        <button style="background: #e63946; box-shadow: 0 4px 14px rgba(230, 50, 70, 0.25);" onclick="deleteEmployeeProfile()">
             💥 Terminate & Delete Profile Record
         </button>
         <div id="adminAlert"></div>
@@ -337,10 +334,41 @@
 
     <script>
         let workTimerInterval = null; 
-        // Global system lock to handle asynchronous race conditions
         let isProcessingAttendance = false;
 
-        // Generates or retrieves a persistent unique Device ID for the browser
+        /* CLIENT ANTI-CRASH SAFETY NETS */
+        window.addEventListener('error', function(e) {
+            console.error("Client safety caught exception:", e.error);
+            resetProcessingState();
+        });
+
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error("Promise rejected gracefully:", e.reason);
+            resetProcessingState();
+        });
+
+        function resetProcessingState() {
+            isProcessingAttendance = false;
+            const inBtn = document.getElementById('checkInBtn');
+            const outBtn = document.getElementById('checkOutBtn');
+            if(inBtn) inBtn.disabled = false;
+            if(outBtn) outBtn.disabled = false;
+        }
+
+        async function fetchWithTimeout(resource, options = {}) {
+            const { timeout = 8000 } = options;
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            try {
+                const response = await fetch(resource, { ...options, signal: controller.signal });
+                clearTimeout(id);
+                return response;
+            } catch (err) {
+                clearTimeout(id);
+                throw err;
+            }
+        }
+
         function getDeviceId() {
             let deviceId = localStorage.getItem('dc_device_id');
             if (!deviceId) {
@@ -374,12 +402,11 @@
 
         async function updateActiveStaffCount() {
             try {
-                const res = await fetch('/api/attendance/active-count');
+                const res = await fetchWithTimeout('/api/attendance/active-count', { timeout: 4000 });
                 const data = await res.json();
                 document.getElementById('activeStaffCount').innerText = `${data.count || 0} Staff`;
             } catch (err) {
                 document.getElementById('activeStaffCount').innerText = "Offline";
-                console.log("Error fetching live count");
             }
         }
 
@@ -428,7 +455,7 @@
             }
 
             try {
-                const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+                const res = await fetchWithTimeout(`/api/employees/${id}`, { method: 'DELETE', timeout: 6000 });
                 const data = await res.json();
                 
                 alertBox.innerText = data.message;
@@ -451,7 +478,12 @@
         function startWorkTimer(checkInTimeISO, shiftHours) {
             if (workTimerInterval) clearInterval(workTimerInterval);
             
-            const checkInDate = new Date(checkInTimeISO);
+            let checkInDate = new Date(checkInTimeISO);
+            if (isNaN(checkInDate.getTime()) && typeof checkInTimeISO === 'string') {
+                const today = new Date().toISOString().split('T')[0];
+                checkInDate = new Date(`${today} ${checkInTimeISO}`);
+            }
+
             const timerDisplay = document.getElementById('shiftTimerDisplay');
             const noteDisplay = document.getElementById('shiftRequirementNote');
             const trackerBox = document.getElementById('shiftTrackerBox');
@@ -462,7 +494,11 @@
             workTimerInterval = setInterval(() => {
                 const now = new Date();
                 const differenceInMs = now - checkInDate;
-                if (differenceInMs < 0) return;
+
+                if (isNaN(differenceInMs) || differenceInMs < 0) {
+                    timerDisplay.innerText = "00:00:00";
+                    return;
+                }
                 
                 const totalSeconds = Math.floor(differenceInMs / 1000);
                 const hours = Math.floor(totalSeconds / 3600);
@@ -493,89 +529,89 @@
             verifyBtn.style.opacity = "0.7";
             verifyBtn.disabled = true;
 
-            setTimeout(async () => {
-                try {
-                    const res = await fetch(`/api/attendance/status/${id}`);
-                    const data = await res.json();
-                    
-                    const checkInBtn = document.getElementById('checkInBtn');
-                    const checkOutBtn = document.getElementById('checkOutBtn');
-                    const welcomeMessage = document.getElementById('welcomeMessage');
-                    const trackerBox = document.getElementById('shiftTrackerBox');
+            try {
+                const res = await fetchWithTimeout(`/api/attendance/status/${id}`, { timeout: 6000 });
+                const data = await res.json();
+                
+                const checkInBtn = document.getElementById('checkInBtn');
+                const checkOutBtn = document.getElementById('checkOutBtn');
+                const welcomeMessage = document.getElementById('welcomeMessage');
+                const trackerBox = document.getElementById('shiftTrackerBox');
 
-                    checkInBtn.style.display = "none";
-                    checkOutBtn.style.display = "none";
-                    welcomeMessage.style.display = "none";
+                checkInBtn.style.display = "none";
+                checkOutBtn.style.display = "none";
+                welcomeMessage.style.display = "none";
 
-                    if (data.status === "unregistered") {
-                        showAlert("Access Denied: ID not registered inside store database.", "error");
-                        trackerBox.style.display = "none";
-                        if (workTimerInterval) clearInterval(workTimerInterval);
-                    } else if (data.status === "not_checked_in") {
-                        checkInBtn.style.display = "block";
+                if (data.status === "unregistered") {
+                    showAlert("Access Denied: ID not registered inside store database.", "error");
+                    trackerBox.style.display = "none";
+                    if (workTimerInterval) clearInterval(workTimerInterval);
+                } 
+                else if (data.status === "not_checked_in") {
+                    checkInBtn.style.display = "block";
+                    if (data.resetNote) {
+                        showAlert(data.resetNote, "success");
+                    } else {
                         showAlert("Profile authenticated successfully. Ready to record session.", "success");
-                        trackerBox.style.display = "none";
-                        if (workTimerInterval) clearInterval(workTimerInterval);
-                    } else if (data.status === "checked_in") {
-                        welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
-                        welcomeMessage.style.display = "block";
-                        checkOutBtn.style.display = "block";
-                        showAlert(`Active shift log started at ${data.checkInTime}.`, "success");
-                        startWorkTimer(data.checkInTimeRaw, data.shiftHours || 10);
-                    } else if (data.status === "completed") {
-                        showAlert("Shift workflow completely finished for today. Thank you!", "success");
-                        trackerBox.style.display = "none";
-                        if (workTimerInterval) clearInterval(workTimerInterval);
                     }
-                } catch (err) {
-                    showAlert("Network fault: Couldn't establish a link to the server.", "error");
-                } finally {
-                    verifyBtn.innerText = originalText;
-                    verifyBtn.style.opacity = "1";
-                    verifyBtn.disabled = false;
+                    trackerBox.style.display = "none";
+                    if (workTimerInterval) clearInterval(workTimerInterval);
+                } 
+                else if (data.status === "checked_in") {
+                    welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
+                    welcomeMessage.style.display = "block";
+                    checkOutBtn.style.display = "block";
+                    showAlert(`Active shift log started today at ${data.checkInTime}.`, "success");
+                    startWorkTimer(data.checkInTimeRaw, data.shiftHours || 10);
+                } 
+                else if (data.status === "completed" || data.status === "already_checked_in") {
+                    showAlert("🚫 You have completed your shift actions for today. Portal will refresh tomorrow at midnight.", "error");
+                    trackerBox.style.display = "none";
+                    if (workTimerInterval) clearInterval(workTimerInterval);
                 }
-            }, 600);
+            } catch (err) {
+                showAlert("Network fault: Couldn't establish a link to the server.", "error");
+            } finally {
+                verifyBtn.innerText = originalText;
+                verifyBtn.style.opacity = "1";
+                verifyBtn.disabled = false;
+            }
         }
 
         function processAttendance(action) {
-            // Drop out immediately if a punch is already in flight
             if (isProcessingAttendance) return;
 
             const employeeId = document.getElementById('empId').value.trim();
             const checkInBtn = document.getElementById('checkInBtn');
             const checkOutBtn = document.getElementById('checkOutBtn');
 
-            // Lock gates and freeze buttons instantly on click
             isProcessingAttendance = true;
-            checkInBtn.disabled = true;
-            checkOutBtn.disabled = true;
+            if (checkInBtn) checkInBtn.disabled = true;
+            if (checkOutBtn) checkOutBtn.disabled = true;
 
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (pos) => sendAttendance(employeeId, action, pos.coords.latitude, pos.coords.longitude),
-                    () => {
+                    (err) => {
                         showAlert("Location access required to confirm presence.", "error");
-                        // Release lock if geo setup drops an error
-                        isProcessingAttendance = false;
-                        checkInBtn.disabled = false;
-                        checkOutBtn.disabled = false;
-                    }
+                        resetProcessingState();
+                    },
+                    { timeout: 7000 }
                 );
             } else {
                 showAlert("Your browser doesn't support distance validation.", "error");
-                isProcessingAttendance = false;
-                checkInBtn.disabled = false;
-                checkOutBtn.disabled = false;
+                resetProcessingState();
             }
         }
 
         async function sendAttendance(employeeId, action, lat, lon) {
             try {
                 const deviceId = getDeviceId();
-                const response = await fetch('/api/attendance', {
+                const response = await fetchWithTimeout('/api/attendance', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ employeeId, action, lat, lon, deviceId })
+                    body: JSON.stringify({ employeeId, action, lat, lon, deviceId }),
+                    timeout: 8000
                 });
                 const data = await response.json();
                 if(data.success) {
@@ -588,10 +624,7 @@
             } catch (err) {
                 showAlert("Network fault: Failed to transfer attendance signature data.", "error");
             } finally {
-                // Safely drop internal state flags to allow future shifts
-                isProcessingAttendance = false;
-                document.getElementById('checkInBtn').disabled = false;
-                document.getElementById('checkOutBtn').disabled = false;
+                resetProcessingState();
             }
         }
 
@@ -603,10 +636,11 @@
             if(!employeeId || !reason) return alert("Fill in your ID and reason!");
 
             try {
-                const res = await fetch('/api/absence-report', {
+                const res = await fetchWithTimeout('/api/absence-report', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ employeeId, reason })
+                    body: JSON.stringify({ employeeId, reason }),
+                    timeout: 6000
                 });
                 const data = await res.json();
                 
@@ -628,12 +662,14 @@
 
         function showAlert(msg, type) {
             const box = document.getElementById('alertBox');
-            box.innerText = msg; box.className = type; box.style.display = "block";
+            if (box) {
+                box.innerText = msg; box.className = type; box.style.display = "block";
+            }
         }
 
         async function checkStoreAnnouncements() {
             try {
-                const res = await fetch('/api/notice');
+                const res = await fetchWithTimeout('/api/notice', { timeout: 4000 });
                 const data = await res.json();
                 if (data.notice && data.notice !== "Welcome to DE Chis Stores Portal!") {
                     document.getElementById('noticeContent').innerText = data.notice;
