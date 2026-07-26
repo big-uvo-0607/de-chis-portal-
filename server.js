@@ -76,7 +76,7 @@ async function getNoticeText() {
 // SECURE VALIDATION ENGINES
 // ========================================================
 const STORE_COORDS = { lat: 9.852923, lon: 8.852990 }; 
-const MAX_DISTANCE_METERS = 300; 
+const MAX_DISTANCE_METERS = 99999; 
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3; 
