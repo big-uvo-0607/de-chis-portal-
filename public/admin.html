@@ -40,6 +40,16 @@
         .flagged { background-color: #ffcdd2 !important; color: #b71c1c; font-weight: bold; }
         
         #absenceCardAdmin { display: none; }
+
+        /* Modal Popup Styles for Missed Days Logs */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 999; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 25px; border-radius: 8px; max-width: 650px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1a3a5f; padding-bottom: 10px; margin-bottom: 15px; }
+        .modal-close { background: #c62828; color: white; border: none; padding: 5px 12px; font-weight: bold; border-radius: 4px; cursor: pointer; width: auto; margin: 0; }
+        .missed-badge { background: #c62828; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .present-badge { background: #2e7d32; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .absence-badge { background: #f57c00; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .view-log-btn { background: #1a3a5f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; width: auto; margin: 0; }
     </style>
 </head>
 <body>
@@ -89,7 +99,7 @@
 
         <div class="card">
             <h2>Active Roster Panel</h2>
-            <table id="rosterTable"><thead><tr><th>ID</th><th>Name</th></tr></thead><tbody></tbody></table>
+            <table id="rosterTable"><thead><tr><th>ID</th><th>Name</th><th>Action</th></tr></thead><tbody></tbody></table>
         </div>
     </div>
 
@@ -114,6 +124,21 @@
                 <tr><th>Date</th><th>ID</th><th>Name</th><th>Checked In</th><th>Checked Out</th><th>Total Duration</th><th>Status</th></tr>
             </thead>
             <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Dialog for Individual Staff History & Missed Days -->
+<div id="historyModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalWorkerName">Worker Attendance & Missed Days Audit</h2>
+            <button class="modal-close" onclick="closeHistoryModal()">X</button>
+        </div>
+        <div id="modalSummary" style="margin-bottom: 15px; font-size: 14px; line-height: 1.6;"></div>
+        <table style="width:100%;">
+            <thead><tr><th>Date</th><th>Status</th><th>Check In</th><th>Check Out</th></tr></thead>
+            <tbody id="modalTimelineBody"></tbody>
         </table>
     </div>
 </div>
@@ -154,7 +179,7 @@
 
             document.querySelector('#rosterTable tbody').innerHTML = employees.map(e => {
                 if (!e) return '';
-                return `<tr><td>${e.id || ''}</td><td>${e.name || ''}</td></tr>`;
+                return `<tr><td>${e.id || ''}</td><td>${e.name || ''}</td><td><button class="view-log-btn" onclick="openWorkerHistory('${e.id}')">Logs & Missed Days</button></td></tr>`;
             }).join('');
             
             document.querySelector('#absenceTable tbody').innerHTML = absenceReports.map(a => {
@@ -184,16 +209,54 @@
 
         document.querySelector('#logsTable tbody').innerHTML = filteredLogs.map(l => {
             if (!l) return '';
-            const displayHours = (l.hoursWorked !== null && l.hoursWorked !== undefined) ? l.hoursWorked : '--';
+            const displayHours = (l.hoursWorked !== null && l.hoursWorked !== undefined) ? (l.hoursWorked + ' hrs') : '--';
             return `
                 <tr class="${l.flagged ? 'flagged' : ''}">
                     <td>${l.date || ''}</td><td>${l.id || ''}</td><td>${l.name || ''}</td><td>${l.checkIn || ''}</td>
                     <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
                     <td>${displayHours}</td>
-                    <td>${l.flagged ? '⚠️ FLAGGED EARLY DEPARTURE' : (l.checkOut ? 'Good Shift' : 'Working')}</td>
+                    <td>${l.flagged ? '⚠️ FLAGGED SHIFT' : (l.checkOut ? 'Good Shift' : 'Working')}</td>
                 </tr>
             `;
         }).join('');
+    }
+
+    async function openWorkerHistory(workerId) {
+        try {
+            const res = await fetch(`/api/admin/employee-history/${workerId}`);
+            const data = await res.json();
+            
+            if (!data.success) {
+                return alert(data.message || "Failed to load worker logs.");
+            }
+
+            document.getElementById('modalWorkerName').innerText = `${data.employee.name} [${data.employee.id}]`;
+            
+            document.getElementById('modalSummary').innerHTML = `
+                <strong>Shift Duration Target:</strong> ${data.employee.shiftHours || 10} Hours<br>
+                <strong>Days Present:</strong> ${data.totalPresentDays} | 
+                <strong>Absences Filed:</strong> ${data.totalAbsencesReported} | 
+                <strong style="color: #c62828;">Total Missed Days: ${data.totalMissedDays}</strong>
+            `;
+
+            document.getElementById('modalTimelineBody').innerHTML = data.timeline.map(item => {
+                if (item.type === 'PRESENT') {
+                    return `<tr><td>${item.date}</td><td><span class="present-badge">PRESENT</span></td><td>${item.checkIn}</td><td>${item.checkOut}</td></tr>`;
+                } else if (item.type === 'ABSENCE_REPORTED') {
+                    return `<tr><td>${item.date}</td><td><span class="absence-badge">EXCUSED ABSENCE</span></td><td colspan="2">Reason: ${item.reason}</td></tr>`;
+                } else {
+                    return `<tr style="background:#ffebee;"><td>${item.date}</td><td><span class="missed-badge">MISSED DAY</span></td><td colspan="2" style="color:#c62828; font-weight:bold;">Did not check in or file absence</td></tr>`;
+                }
+            }).join('');
+
+            document.getElementById('historyModal').style.display = 'flex';
+        } catch (err) {
+            alert("Could not load employee missed days history.");
+        }
+    }
+
+    function closeHistoryModal() {
+        document.getElementById('historyModal').style.display = 'none';
     }
 
     async function registerEmployee() {
@@ -205,17 +268,16 @@
         
         if(!id || !name) return alert("Please fill in both ID and Name parameters!");
 
-        // Pack the new cutoff parameters directly into your outgoing logic array
         const payload = { 
             id: id, 
             name: name, 
             requiredHours: requiredHours ? parseFloat(requiredHours) : 10,
+            shiftHours: requiredHours ? parseFloat(requiredHours) : 10,
             cutoffHour: hourInput !== "" ? parseInt(hourInput) : 8,
             cutoffMinute: minuteInput !== "" ? parseInt(minuteInput) : 0
         };
 
         try {
-            // Updated to route cleanly to your active dynamic registration endpoint
             const res = await fetch('/api/employees', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

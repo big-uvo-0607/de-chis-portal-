@@ -29,15 +29,33 @@ mongoose.connect(MONGO_URI)
     .catch((err) => console.error("❌ [DATABASE ERROR] Failed to connect to MongoDB:", err));
 
 // ========================================================
+// LOCAL TIMEZONE HELPERS (NIGERIA / WAT / UTC+1)
+// ========================================================
+function getFormattedNigerianTime(dateObj = new Date()) {
+    return dateObj.toLocaleTimeString('en-US', {
+        timeZone: 'Africa/Lagos',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
+function getNigerianDateString(dateObj = new Date()) {
+    return new Date(dateObj).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+}
+
+// ========================================================
 // DATABASE SCHEMAS & MODELS
 // ========================================================
 const EmployeeSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true, uppercase: true, trim: true },
     name: { type: String, required: true, trim: true },
     role: { type: String, default: "Staff Member", trim: true },
-    shiftHours: { type: Number, default: 8 },
+    shiftHours: { type: Number, default: 10 },
     cutoffHour: { type: Number, default: 8 },
-    cutoffMinute: { type: Number, default: 0 }
+    cutoffMinute: { type: Number, default: 0 },
+    // 0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday
+    workDays: { type: [Number], default: [1, 2, 3, 4, 5, 6] }
 }, { timestamps: true });
 
 const Employee = mongoose.model('Employee', EmployeeSchema);
@@ -48,7 +66,8 @@ const AttendanceLogSchema = new mongoose.Schema({
     deviceId: { type: String, required: true, trim: true },
     checkInTimeRaw: { type: Date, default: Date.now },
     checkInTimeFormatted: { type: String, required: true },
-    checkOutTimeRaw: { type: Date }
+    checkOutTimeRaw: { type: Date },
+    checkOutTimeFormatted: { type: String }
 }, { timestamps: true });
 
 const AttendanceLog = mongoose.model('AttendanceLog', AttendanceLogSchema);
@@ -107,10 +126,26 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 function isPastEmployeeCutoff(employee) {
     if (!employee) return false;
-    const now = new Date();
-    const currentTotalMinutes = (now.getHours() * 60) + now.getMinutes();
+    const nowNigeria = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }));
+    const currentTotalMinutes = (nowNigeria.getHours() * 60) + nowNigeria.getMinutes();
     const cutoffTotalMinutes = ((employee.cutoffHour || 8) * 60) + (employee.cutoffMinute || 0);
     return currentTotalMinutes >= cutoffTotalMinutes;
+}
+
+function isCheckInLate(checkInDateObj, employee) {
+    if (!checkInDateObj || !employee) return false;
+    const localCheckInStr = checkInDateObj.toLocaleString("en-US", { timeZone: "Africa/Lagos" });
+    const localCheckIn = new Date(localCheckInStr);
+    const checkInTotalMinutes = (localCheckIn.getHours() * 60) + localCheckIn.getMinutes();
+    const cutoffTotalMinutes = ((employee.cutoffHour || 8) * 60) + (employee.cutoffMinute || 0);
+    return checkInTotalMinutes > cutoffTotalMinutes;
+}
+
+function isEarlyDeparture(log, employee) {
+    if (!log || log.status !== 'completed' || !log.checkInTimeRaw || !log.checkOutTimeRaw || !employee) return false;
+    const diffMs = new Date(log.checkOutTimeRaw) - new Date(log.checkInTimeRaw);
+    const hoursWorked = diffMs / (1000 * 60 * 60);
+    return hoursWorked < (employee.shiftHours || 10);
 }
 
 // ========================================================
@@ -144,25 +179,35 @@ app.get('/api/admin/data', async (req, res) => {
         const activeNotice = await getNoticeText();
 
         const logsPayload = activeLogs.map(log => {
-            const emp = employeeList.find(e => e.id === log.employeeId) || { name: "Unknown Staff", shiftHours: 8 };
-            const isLate = log.checkInTimeRaw ? isPastEmployeeCutoff(emp) : false;
-            const rawDate = log.checkInTimeRaw ? new Date(log.checkInTimeRaw) : new Date();
+            const emp = employeeList.find(e => e.id === log.employeeId) || { name: "Unknown Staff", shiftHours: 10, cutoffHour: 8, cutoffMinute: 0 };
+            
+            const late = isCheckInLate(log.checkInTimeRaw ? new Date(log.checkInTimeRaw) : null, emp);
+            const early = isEarlyDeparture(log, emp);
+            const isFlagged = late || early;
 
             let checkOutDisplay = null;
             if (log.status === 'completed') {
-                checkOutDisplay = 'Finalized';
+                checkOutDisplay = log.checkOutTimeFormatted || (log.checkOutTimeRaw ? getFormattedNigerianTime(new Date(log.checkOutTimeRaw)) : 'Finalized');
             } else if (log.status === 'LEFT') {
-                checkOutDisplay = 'LEFT';
+                checkOutDisplay = 'LEFT (SYSTEM RESET)';
+            }
+
+            let calculatedHours = emp.shiftHours || 10;
+            if (log.checkInTimeRaw && log.checkOutTimeRaw) {
+                const diffMs = new Date(log.checkOutTimeRaw) - new Date(log.checkInTimeRaw);
+                calculatedHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(1));
             }
 
             return {
-                date: rawDate.toISOString().split('T')[0],
+                date: getNigerianDateString(log.checkInTimeRaw || new Date()),
                 id: log.employeeId,
                 name: emp.name,
                 checkIn: log.checkInTimeFormatted || '--:--',
                 checkOut: checkOutDisplay,
-                hoursWorked: emp.shiftHours || 8,
-                flagged: isLate
+                hoursWorked: calculatedHours,
+                flagged: isFlagged,
+                late: late,
+                early: early
             };
         });
 
@@ -175,6 +220,83 @@ app.get('/api/admin/data', async (req, res) => {
     } catch (err) {
         console.error("Admin data fetch failed:", err);
         res.status(500).json({ success: false, message: "Database read error." });
+    }
+});
+
+// 1B. EMPLOYEE HISTORY & MISSED DAYS ENGINE
+app.get('/api/admin/employee-history/:id', async (req, res) => {
+    try {
+        const id = req.params.id.trim().toUpperCase();
+        const employee = await Employee.findOne({ id }).lean();
+
+        if (!employee) {
+            return res.status(404).json({ success: false, message: "Employee not found." });
+        }
+
+        const logs = await AttendanceLog.find({ employeeId: id }).lean();
+        const absenceReports = await AbsenceReport.find({ employeeId: id }).lean();
+
+        const startDate = employee.createdAt ? new Date(employee.createdAt) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const endDate = new Date();
+
+        const missedDays = [];
+        const historyTimeline = [];
+
+        let curr = new Date(startDate);
+        curr.setHours(0, 0, 0, 0);
+
+        const workDays = (employee.workDays && employee.workDays.length > 0) ? employee.workDays : [1, 2, 3, 4, 5, 6];
+
+        while (curr <= endDate) {
+            const dayOfWeek = curr.getDay();
+            const dateStr = getNigerianDateString(curr);
+
+            if (workDays.includes(dayOfWeek)) {
+                const logForDay = logs.find(l => getNigerianDateString(l.checkInTimeRaw) === dateStr);
+                const absenceForDay = absenceReports.find(a => a.date === dateStr);
+
+                if (logForDay) {
+                    historyTimeline.push({
+                        date: dateStr,
+                        type: 'PRESENT',
+                        checkIn: logForDay.checkInTimeFormatted,
+                        checkOut: logForDay.checkOutTimeFormatted || (logForDay.status === 'checked_in' ? 'On Shift' : 'Completed'),
+                        status: logForDay.status
+                    });
+                } else if (absenceForDay) {
+                    historyTimeline.push({
+                        date: dateStr,
+                        type: 'ABSENCE_REPORTED',
+                        reason: absenceForDay.reason,
+                        submittedAt: absenceForDay.submittedAt
+                    });
+                } else {
+                    const isToday = (dateStr === getNigerianDateString(new Date()));
+                    if (!isToday) {
+                        missedDays.push(dateStr);
+                        historyTimeline.push({
+                            date: dateStr,
+                            type: 'MISSED_DAY'
+                        });
+                    }
+                }
+            }
+            curr.setDate(curr.getDate() + 1);
+        }
+
+        res.json({
+            success: true,
+            employee,
+            totalPresentDays: logs.length,
+            totalAbsencesReported: absenceReports.length,
+            totalMissedDays: missedDays.length,
+            missedDatesList: missedDays,
+            timeline: historyTimeline.reverse()
+        });
+
+    } catch (err) {
+        console.error("Employee history audit failed:", err);
+        res.status(500).json({ success: false, message: "History audit database error." });
     }
 });
 
@@ -196,14 +318,15 @@ app.post('/api/admin/notice', async (req, res) => {
 // 3. REGISTER STAFF PROFILE
 app.post(['/api/employees', '/api/admin/register'], async (req, res) => {
     try {
-        const { id, name, requiredHours, shiftHours, cutoffHour, cutoffMinute } = req.body;
+        const { id, name, requiredHours, shiftHours, cutoffHour, cutoffMinute, workDays } = req.body;
         
         if (!id || !name || !id.trim() || !name.trim()) {
             return res.status(400).json({ success: false, message: "Missing ID or Name parameters." });
         }
         
         const targetId = id.trim().toUpperCase();
-        const hours = parseInt(shiftHours) || parseInt(requiredHours) || 8;
+        const hours = parseInt(shiftHours) || parseInt(requiredHours) || 10;
+        const parsedWorkDays = Array.isArray(workDays) ? workDays.map(Number) : [1, 2, 3, 4, 5, 6];
 
         const updatedEmployee = await Employee.findOneAndUpdate(
             { id: targetId },
@@ -213,7 +336,8 @@ app.post(['/api/employees', '/api/admin/register'], async (req, res) => {
                 role: "Staff Member",
                 shiftHours: hours,
                 cutoffHour: cutoffHour !== undefined && cutoffHour !== "" ? parseInt(cutoffHour) : 8,
-                cutoffMinute: cutoffMinute !== undefined && cutoffMinute !== "" ? parseInt(cutoffMinute) : 0
+                cutoffMinute: cutoffMinute !== undefined && cutoffMinute !== "" ? parseInt(cutoffMinute) : 0,
+                workDays: parsedWorkDays
             },
             { upsert: true, new: true, runValidators: true }
         );
@@ -266,19 +390,17 @@ app.get('/api/attendance/status/:id', async (req, res) => {
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-        // Check for an open shift
         const currentLog = await AttendanceLog.findOne({ employeeId: id, status: 'checked_in' });
 
         if (currentLog) {
             const checkInDate = new Date(currentLog.checkInTimeRaw);
             
-            // IF SHIFT IS FROM A PREVIOUS DAY (FORGOTTEN CLOCK-OUT)
             if (checkInDate < startOfToday) {
                 currentLog.status = 'LEFT';
                 currentLog.checkOutTimeRaw = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate(), 23, 59, 59);
+                currentLog.checkOutTimeFormatted = "11:59 PM";
                 await currentLog.save();
 
-                // Check if they already checked in today after reset
                 const todayCompleted = await AttendanceLog.findOne({
                     employeeId: id,
                     checkInTimeRaw: { $gte: startOfToday, $lte: endOfToday }
@@ -291,17 +413,15 @@ app.get('/api/attendance/status/:id', async (req, res) => {
                 return res.json({ status: "not_checked_in", name: employee.name });
             }
 
-            // Normal active shift for today
             return res.json({
                 status: currentLog.status,
                 name: employee.name,
                 checkInTime: currentLog.checkInTimeFormatted,
                 checkInTimeRaw: currentLog.checkInTimeRaw ? currentLog.checkInTimeRaw.toISOString() : new Date().toISOString(),
-                shiftHours: employee.shiftHours
+                shiftHours: employee.shiftHours || 10
             });
         }
 
-        // Check if already completed a shift today
         const completedToday = await AttendanceLog.findOne({
             employeeId: id,
             checkInTimeRaw: { $gte: startOfToday, $lte: endOfToday },
@@ -351,7 +471,6 @@ app.post('/api/attendance', async (req, res) => {
         const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
         if (action === 'checkin') {
-            // One check-in per day restriction
             const existingToday = await AttendanceLog.findOne({
                 employeeId: id,
                 checkInTimeRaw: { $gte: startOfToday, $lte: endOfToday }
@@ -386,7 +505,7 @@ app.post('/api/attendance', async (req, res) => {
                 status: 'checked_in',
                 deviceId: cleanDeviceId,
                 checkInTimeRaw: now,
-                checkInTimeFormatted: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                checkInTimeFormatted: getFormattedNigerianTime(now)
             });
 
             return res.json({ 
@@ -401,6 +520,7 @@ app.post('/api/attendance', async (req, res) => {
             
             activeLog.status = 'completed';
             activeLog.checkOutTimeRaw = now;
+            activeLog.checkOutTimeFormatted = getFormattedNigerianTime(now);
             await activeLog.save();
             return res.json({ success: true, message: "Shift finalized safely!" });
         }
@@ -448,12 +568,13 @@ app.post('/api/absence-report', async (req, res) => {
         const employee = await Employee.findOne({ id });
         if (!employee) return res.status(400).json({ success: false, message: "ID unregistered." });
         
+        const now = new Date();
         await AbsenceReport.create({
-            date: new Date().toISOString().split('T')[0],
+            date: getNigerianDateString(now),
             employeeId: id,
             name: employee.name,
             reason: reason.trim(),
-            submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            submittedAt: getFormattedNigerianTime(now)
         });
         
         res.json({ success: true, message: "Absence ticket logged in MongoDB!" });
@@ -467,11 +588,10 @@ app.post('/api/absence-report', async (req, res) => {
 // FREE HOSTING KEEP-ALIVE SYSTEM
 // ========================================================
 setInterval(() => {
-    // Non-blocking ping to maintain database connection and warm instance
     if (mongoose.connection.readyState === 1) {
         AttendanceLog.estimatedDocumentCount().catch(() => {});
     }
-}, 5 * 60 * 1000); // 5-minute interval
+}, 5 * 60 * 1000);
 
 app.listen(PORT, () => {
     console.log(`[DE CHIS STORES PORTAL ENGINE LIVE AND DB ATTACHED ON PORT ${PORT}]`);
