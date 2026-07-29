@@ -97,6 +97,17 @@ const AttendanceLogSchema = new mongoose.Schema({
 
 const AttendanceLog = mongoose.model('AttendanceLog', AttendanceLogSchema);
 
+// NEW: SCHEMA FOR TRACKING BLOCKED/LATE CHECK-IN ATTEMPTS FOR ADMIN ALERTS
+const BlockedAttemptSchema = new mongoose.Schema({
+    employeeId: { type: String, required: true, uppercase: true, trim: true },
+    employeeName: { type: String, required: true, trim: true },
+    reason: { type: String, required: true, trim: true },
+    attemptTimeFormatted: { type: String, required: true },
+    date: { type: String, required: true }
+}, { timestamps: true });
+
+const BlockedAttempt = mongoose.model('BlockedAttempt', BlockedAttemptSchema);
+
 const AbsenceReportSchema = new mongoose.Schema({
     date: { type: String, required: true },
     employeeId: { type: String, required: true, uppercase: true, trim: true },
@@ -200,6 +211,7 @@ app.get('/api/admin/data', async (req, res, next) => {
         const employeeList = await Employee.find({}).lean();
         const activeLogs = await AttendanceLog.find({}).sort({ checkInTimeRaw: -1 }).lean();
         const absenceList = await AbsenceReport.find({}).sort({ createdAt: -1 }).lean();
+        const blockedAttemptsList = await BlockedAttempt.find({}).sort({ createdAt: -1 }).limit(50).lean();
         const activeNotice = await getNoticeText();
 
         const logsPayload = activeLogs.map(log => {
@@ -239,6 +251,7 @@ app.get('/api/admin/data', async (req, res, next) => {
             employeeList: employeeList,
             logs: logsPayload,
             absenceReports: absenceList,
+            blockedAttempts: blockedAttemptsList, // <--- Sent directly to dashboard feed
             currentNotice: activeNotice
         });
     } catch (err) {
@@ -247,7 +260,18 @@ app.get('/api/admin/data', async (req, res, next) => {
     }
 });
 
-// 1B. EMPLOYEE HISTORY & MISSED DAYS ENGINE
+// 1B. CLEAR BLOCKED ATTEMPTS ALERT FEED
+app.delete('/api/admin/clear-blocked-attempts', async (req, res, next) => {
+    try {
+        await BlockedAttempt.deleteMany({});
+        res.json({ success: true, message: "Blocked check-in alerts cleared." });
+    } catch (err) {
+        console.error("Failed to clear blocked attempts:", err);
+        next(err);
+    }
+});
+
+// 1C. EMPLOYEE HISTORY & MISSED DAYS ENGINE
 app.get('/api/admin/employee-history/:id', async (req, res, next) => {
     try {
         if (!req.params.id) {
@@ -328,7 +352,7 @@ app.get('/api/admin/employee-history/:id', async (req, res, next) => {
     }
 });
 
-// 1C. ADMIN ALLOW DEVICE SHARING BYPASS (SUPPORTS BOTH PUT AND POST)
+// 1D. ADMIN ALLOW DEVICE SHARING BYPASS
 const handleDeviceBypass = async (req, res, next) => {
     try {
         if (!req.params.id) {
@@ -337,7 +361,6 @@ const handleDeviceBypass = async (req, res, next) => {
 
         const id = String(req.params.id).trim().toUpperCase();
         
-        // Find by custom employee ID or Mongo ObjectId
         const employee = await Employee.findOne({
             $or: [{ id: id }, { _id: mongoose.Types.ObjectId.isValid(id) ? id : null }]
         });
@@ -530,20 +553,30 @@ app.post('/api/attendance', async (req, res, next) => {
 
         const now = new Date();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
         if (action === 'checkin') {
             const existingToday = await AttendanceLog.findOne({
                 employeeId: id,
-                checkInTimeRaw: { $gte: startOfToday, $lte: endOfToday }
+                checkInTimeRaw: { $gte: startOfToday }
             });
 
             if (existingToday) {
                 return res.status(400).json({ success: false, message: "You have already checked in today. Please return tomorrow!" });
             }
 
+            // CUTOFF LOCK & ADMIN ALERT LOGGING
             if (isPastEmployeeCutoff(employee)) {
                 const formattedCutoff = `${String(employee.cutoffHour || 8).padStart(2, '0')}:${String(employee.cutoffMinute || 0).padStart(2, '0')}`;
+                
+                // Log the late attempt to database so admin gets notified
+                await BlockedAttempt.create({
+                    employeeId: id,
+                    employeeName: employee.name,
+                    reason: `Attempted check-in past cutoff (${formattedCutoff})`,
+                    attemptTimeFormatted: getFormattedNigerianTime(now),
+                    date: getNigerianDateString(now)
+                });
+
                 return res.status(403).json({ success: false, message: `Check-in window closed at ${formattedCutoff}.` });
             }
 
@@ -561,6 +594,15 @@ app.post('/api/attendance', async (req, res, next) => {
             // FRAUD LOCK & ADMIN BYPASS LOGIC
             if (fraudDeviceMatch) {
                 if (!employee.deviceBypassAllowed) {
+                    // Log fraud attempt for admin alert feed
+                    await BlockedAttempt.create({
+                        employeeId: id,
+                        employeeName: employee.name,
+                        reason: `Fraud Check-in Blocked (Shared Device with ${fraudDeviceMatch.employeeId})`,
+                        attemptTimeFormatted: getFormattedNigerianTime(now),
+                        date: getNigerianDateString(now)
+                    });
+
                     return res.status(403).json({ success: false, message: "Fraud Protection: Device active for another staff. Ask Admin to grant device sharing access." });
                 }
                 
@@ -614,6 +656,7 @@ app.delete('/api/employees/:id', async (req, res, next) => {
         if (deleted) {
             await AttendanceLog.deleteMany({ employeeId: id });
             await AbsenceReport.deleteMany({ employeeId: id });
+            await BlockedAttempt.deleteMany({ employeeId: id });
             return res.json({ success: true, message: "Staff records wiped from database." });
         }
         res.status(404).json({ success: false, message: "ID not found." });
