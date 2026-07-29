@@ -1,12 +1,17 @@
 const express = require('express');
 const path = require('path');
 const mongoose = require('mongoose');
+const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ========================================================
-// GLOBAL CRASH SHIELDS
+// MIDDLEWARE & GLOBAL CRASH SHIELDS
 // ========================================================
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
 process.on('uncaughtException', (err) => {
     console.error('❌ [CRITICAL UNCAUGHT EXCEPTION]:', err && err.stack ? err.stack : err);
 });
@@ -14,10 +19,6 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
     console.error('❌ [UNHANDLED PROMISE REJECTION]:', reason && reason.stack ? reason.stack : reason);
 });
-
-// Body parsing with size limits to prevent payload abuse
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ========================================================
 // MONGODB CONNECTION SETUP
@@ -78,7 +79,8 @@ const EmployeeSchema = new mongoose.Schema({
     shiftHours: { type: Number, default: 10 },
     cutoffHour: { type: Number, default: 8 },
     cutoffMinute: { type: Number, default: 0 },
-    workDays: { type: [Number], default: [1, 2, 3, 4, 5, 6] }
+    workDays: { type: [Number], default: [1, 2, 3, 4, 5, 6] },
+    deviceBypassAllowed: { type: Boolean, default: false } // Temporary administrative bypass flag
 }, { timestamps: true });
 
 const Employee = mongoose.model('Employee', EmployeeSchema);
@@ -326,6 +328,40 @@ app.get('/api/admin/employee-history/:id', async (req, res, next) => {
     }
 });
 
+// 1C. ADMIN ALLOW DEVICE SHARING BYPASS (SUPPORTS BOTH PUT AND POST)
+const handleDeviceBypass = async (req, res, next) => {
+    try {
+        if (!req.params.id) {
+            return res.status(400).json({ success: false, message: "ID parameter missing." });
+        }
+
+        const id = String(req.params.id).trim().toUpperCase();
+        
+        // Find by custom employee ID or Mongo ObjectId
+        const employee = await Employee.findOne({
+            $or: [{ id: id }, { _id: mongoose.Types.ObjectId.isValid(id) ? id : null }]
+        });
+
+        if (!employee) {
+            return res.status(404).json({ success: false, message: "Worker record not found." });
+        }
+
+        employee.deviceBypassAllowed = true;
+        await employee.save();
+
+        res.json({
+            success: true,
+            message: `Device sharing permission granted for ${employee.name}. They can now check in once on a shared device.`
+        });
+    } catch (err) {
+        console.error("Device bypass update failed:", err);
+        next(err);
+    }
+};
+
+app.put('/api/admin/allow-device-bypass/:id', handleDeviceBypass);
+app.post('/api/admin/allow-device-bypass/:id', handleDeviceBypass);
+
 // 2. BROADCAST NOTICE
 app.post('/api/admin/notice', async (req, res, next) => {
     try {
@@ -522,8 +558,15 @@ app.post('/api/attendance', async (req, res, next) => {
                 employeeId: { $ne: id } 
             });
 
+            // FRAUD LOCK & ADMIN BYPASS LOGIC
             if (fraudDeviceMatch) {
-                return res.status(403).json({ success: false, message: "Fraud Protection: Device already active for another staff." });
+                if (!employee.deviceBypassAllowed) {
+                    return res.status(403).json({ success: false, message: "Fraud Protection: Device active for another staff. Ask Admin to grant device sharing access." });
+                }
+                
+                // One-time bypass consumed — reset back to false
+                employee.deviceBypassAllowed = false;
+                await employee.save();
             }
 
             const newLog = await AttendanceLog.create({
@@ -641,7 +684,6 @@ async function runMidnightAutoClose() {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
 
-        // Find all abandoned shifts checked in BEFORE today that are still active
         const abandonedLogs = await AttendanceLog.find({
             status: 'checked_in',
             checkInTimeRaw: { $lt: startOfToday }
@@ -653,7 +695,6 @@ async function runMidnightAutoClose() {
         for (const log of abandonedLogs) {
             const checkInDate = new Date(log.checkInTimeRaw);
             
-            // Set checkout to 11:59:59 PM on the day the employee originally checked in
             const midnightAutoCheckout = new Date(
                 checkInDate.getFullYear(),
                 checkInDate.getMonth(),
@@ -675,7 +716,6 @@ async function runMidnightAutoClose() {
     }
 }
 
-// Run immediately on server startup, then poll every 15 minutes
 runMidnightAutoClose();
 setInterval(runMidnightAutoClose, 15 * 60 * 1000);
 
