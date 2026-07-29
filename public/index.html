@@ -373,11 +373,16 @@
             const outBtn = document.getElementById('checkOutBtn');
             const absenceBtn = document.getElementById('submitAbsenceBtn');
             const deleteBtn = document.getElementById('deleteBtn');
+            const verifyBtn = document.getElementById('verifyBtn');
 
             if (inBtn) inBtn.disabled = false;
             if (outBtn) outBtn.disabled = false;
             if (absenceBtn) absenceBtn.disabled = false;
             if (deleteBtn) deleteBtn.disabled = false;
+            if (verifyBtn) {
+                verifyBtn.disabled = false;
+                verifyBtn.style.opacity = "1";
+            }
         }
 
         function showAlert(msg, type) {
@@ -392,10 +397,11 @@
         async function fetchNoticeBanner() {
             try {
                 const res = await fetchWithTimeout('/api/notice', { timeout: 4000 });
+                if (!res.ok) return;
                 const data = await res.json();
                 const banner = document.getElementById('noticeBanner');
                 const content = document.getElementById('noticeContent');
-                if (data.notice && data.notice.trim() !== '') {
+                if (data && data.notice && data.notice.trim() !== '') {
                     if (content) content.innerText = data.notice;
                     if (banner) banner.style.display = 'block';
                 }
@@ -419,25 +425,33 @@
         }
 
         function getDeviceId() {
-            let deviceId = localStorage.getItem('dc_device_id');
-            if (!deviceId) {
-                deviceId = 'DEV-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
-                localStorage.setItem('dc_device_id', deviceId);
+            try {
+                let deviceId = localStorage.getItem('dc_device_id');
+                if (!deviceId) {
+                    deviceId = 'DEV-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
+                    localStorage.setItem('dc_device_id', deviceId);
+                }
+                return deviceId;
+            } catch (e) {
+                return 'DEV-FALLBACK-' + Date.now();
             }
-            return deviceId;
         }
 
         function toggleSystemTheme() {
             document.body.classList.toggle('dark-theme');
             const isDark = document.body.classList.contains('dark-theme');
-            localStorage.setItem('portalThemeSelection', isDark ? 'dark' : 'light');
+            try {
+                localStorage.setItem('portalThemeSelection', isDark ? 'dark' : 'light');
+            } catch(e) {}
         }
 
         function restoreSavedTheme() {
-            const savedTheme = localStorage.getItem('portalThemeSelection');
-            if(savedTheme === 'dark') {
-                document.body.classList.add('dark-theme');
-            }
+            try {
+                const savedTheme = localStorage.getItem('portalThemeSelection');
+                if(savedTheme === 'dark') {
+                    document.body.classList.add('dark-theme');
+                }
+            } catch(e) {}
         }
 
         function startLiveClock() {
@@ -457,6 +471,7 @@
         async function updateActiveStaffCount() {
             try {
                 const res = await fetchWithTimeout('/api/attendance/active-count', { timeout: 4000 });
+                if (!res.ok) throw new Error("Offline");
                 const data = await res.json();
                 const countEl = document.getElementById('activeStaffCount');
                 if (countEl) countEl.innerText = `${data.count || 0} Staff`;
@@ -475,12 +490,14 @@
 
         function toggleAbsenceForm() {
             const card = document.getElementById('absenceCard');
-            card.classList.toggle('hidden-panel');
-            document.getElementById('adminCard').classList.add('hidden-panel');
+            if (card) card.classList.toggle('hidden-panel');
+            const adminCard = document.getElementById('adminCard');
+            if (adminCard) adminCard.classList.add('hidden-panel');
         }
 
         function toggleAdminPanel() {
             const card = document.getElementById('adminCard');
+            if (!card) return;
             if (!card.classList.contains('hidden-panel')) {
                 card.classList.add('hidden-panel');
                 return;
@@ -489,7 +506,8 @@
             if (accessPin === "2026") { 
                 showAlert("Admin Access Granted.", "success");
                 card.classList.remove('hidden-panel');
-                document.getElementById('absenceCard').classList.add('hidden-panel');
+                const absenceCard = document.getElementById('absenceCard');
+                if (absenceCard) absenceCard.classList.add('hidden-panel');
             } else if (accessPin !== null) {
                 alert("🔒 Access Denied: Unauthorized Personnel Attempt Tracked.");
             }
@@ -498,6 +516,7 @@
         async function deleteEmployeeProfile() {
             if (isDeletingProfile) return;
             const inputField = document.getElementById('deleteEmpId');
+            if (!inputField) return;
             const id = inputField.value.trim();
             const alertBox = document.getElementById('adminAlert');
             const deleteBtn = document.getElementById('deleteBtn');
@@ -519,20 +538,22 @@
                 const res = await fetchWithTimeout(`/api/employees/${id}`, { method: 'DELETE', timeout: 6000 });
                 const data = await res.json();
                 
-                alertBox.innerText = data.message;
-                alertBox.style.display = "block";
+                if (alertBox) {
+                    alertBox.innerText = data.message || "Operation finished.";
+                    alertBox.style.display = "block";
+                    alertBox.className = data.success ? "success" : "error";
+                }
                 
                 if(data.success) {
-                    alertBox.className = "success";
                     inputField.value = "";
                     updateActiveStaffCount();
-                } else {
-                    alertBox.className = "error";
                 }
             } catch (err) {
-                alertBox.innerText = "Error: Backend endpoint /api/employees/:employeeId is missing or unreachable.";
-                alertBox.className = "error";
-                alertBox.style.display = "block";
+                if (alertBox) {
+                    alertBox.innerText = "Error: Backend endpoint /api/employees/:employeeId is missing or unreachable.";
+                    alertBox.className = "error";
+                    alertBox.style.display = "block";
+                }
             } finally {
                 isDeletingProfile = false;
                 if (deleteBtn) deleteBtn.disabled = false;
@@ -580,6 +601,7 @@
 
         async function checkUserStatus() {
             const inputField = document.getElementById('empId');
+            if (!inputField) return;
             const id = inputField.value.trim();
             
             if(!id) {
@@ -589,11 +611,13 @@
             }
             
             const verifyBtn = document.getElementById('verifyBtn');
-            const originalText = verifyBtn.innerText;
+            const originalText = verifyBtn ? verifyBtn.innerText : "Verify Profile";
             
-            verifyBtn.innerText = "⏳ Authenticating with Cloud...";
-            verifyBtn.style.opacity = "0.7";
-            verifyBtn.disabled = true;
+            if (verifyBtn) {
+                verifyBtn.innerText = "⏳ Authenticating with Cloud...";
+                verifyBtn.style.opacity = "0.7";
+                verifyBtn.disabled = true;
+            }
 
             try {
                 const res = await fetchWithTimeout(`/api/attendance/status/${id}`, { timeout: 6000 });
@@ -625,11 +649,11 @@
                 } 
                 else if (data.status === "checked_in") {
                     if (welcomeMessage) {
-                        welcomeMessage.innerText = getTimeOfDayGreeting(data.name);
+                        welcomeMessage.innerText = getTimeOfDayGreeting(data.name || "Employee");
                         welcomeMessage.style.display = "block";
                     }
                     if (checkOutBtn) checkOutBtn.style.display = "block";
-                    showAlert(`Active shift log started today at ${data.checkInTime}.`, "success");
+                    showAlert(`Active shift log started today at ${data.checkInTime || 'known time'}.`, "success");
                     startWorkTimer(data.checkInTimeRaw, data.shiftHours || 10);
                 } 
                 else if (data.status === "completed" || data.status === "already_checked_in") {
@@ -640,16 +664,19 @@
             } catch (err) {
                 showAlert("Network fault: Couldn't establish a link to the server.", "error");
             } finally {
-                verifyBtn.innerText = originalText;
-                verifyBtn.style.opacity = "1";
-                verifyBtn.disabled = false;
+                if (verifyBtn) {
+                    verifyBtn.innerText = originalText;
+                    verifyBtn.style.opacity = "1";
+                    verifyBtn.disabled = false;
+                }
             }
         }
 
         function processAttendance(action) {
             if (isProcessingAttendance) return;
 
-            const employeeId = document.getElementById('empId').value.trim();
+            const empField = document.getElementById('empId');
+            const employeeId = empField ? empField.value.trim() : "";
             const checkInBtn = document.getElementById('checkInBtn');
             const checkOutBtn = document.getElementById('checkOutBtn');
 
@@ -703,12 +730,12 @@
                     timeout: 8000
                 });
                 const data = await response.json();
-                if(data.success) {
-                    showAlert(data.message, "success");
+                if(data && data.success) {
+                    showAlert(data.message || "Attendance recorded successfully.", "success");
                     await checkUserStatus(); 
                     updateActiveStaffCount();
                 } else {
-                    showAlert(data.message, "error");
+                    showAlert(data ? data.message : "Attendance record failed.", "error");
                 }
             } catch (err) {
                 showAlert("Network fault: Failed to transfer attendance signature data.", "error");
@@ -720,8 +747,10 @@
         async function submitAbsence() {
             if (isSubmittingAbsence) return;
 
-            const employeeId = document.getElementById('absentEmpId').value.trim();
-            const reason = document.getElementById('absenceReason').value.trim();
+            const empInput = document.getElementById('absentEmpId');
+            const reasonInput = document.getElementById('absenceReason');
+            const employeeId = empInput ? empInput.value.trim() : "";
+            const reason = reasonInput ? reasonInput.value.trim() : "";
             const box = document.getElementById('absenceAlert');
             const submitBtn = document.getElementById('submitAbsenceBtn');
             
@@ -739,19 +768,23 @@
                 });
                 const data = await res.json();
                 
-                box.innerText = data.message;
-                box.style.display = "block";
-                box.className = data.success ? "success" : "error";
+                if (box) {
+                    box.innerText = data.message || "Request submitted.";
+                    box.style.display = "block";
+                    box.className = data.success ? "success" : "error";
+                }
                 
                 if(data.success) {
-                    document.getElementById('absentEmpId').value = "";
-                    document.getElementById('absenceReason').value = "";
+                    if (empInput) empInput.value = "";
+                    if (reasonInput) reasonInput.value = "";
                     setTimeout(() => { toggleAbsenceForm(); }, 1800);
                 }
             } catch (err) {
-                box.innerText = "Network Error: Couldn't file your absence ticket.";
-                box.className = "error";
-                box.style.display = "block";
+                if (box) {
+                    box.innerText = "Network Error: Couldn't file your absence ticket.";
+                    box.className = "error";
+                    box.style.display = "block";
+                }
             } finally {
                 isSubmittingAbsence = false;
                 if (submitBtn) submitBtn.disabled = false;

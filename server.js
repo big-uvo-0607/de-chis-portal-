@@ -4,44 +4,68 @@ const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// ========================================================
+// GLOBAL CRASH SHIELDS (PREVENT SERVER CRASHES)
+// ========================================================
+process.on('uncaughtException', (err) => {
+    console.error('❌ [CRITICAL UNCAUGHT EXCEPTION]:', err && err.stack ? err.stack : err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ [UNHANDLED PROMISE REJECTION]:', reason && reason.stack ? reason.stack : reason);
+});
+
 // Body parsing with size limits to prevent payload abuse
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ========================================================
-// GLOBAL CRASH SHIELDS (PREVENT SERVER CRASHES)
-// ========================================================
-process.on('uncaughtException', (err) => {
-    console.error('❌ [CRITICAL UNCAUGHT EXCEPTION]:', err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ [UNHANDLED PROMISE REJECTION]:', reason);
-});
-
-// ========================================================
-// MONGODB CONNECTION SETUP
+// MONGODB CONNECTION SETUP & AUTO-RECONNECT SHIELD
 // ========================================================
 const MONGO_URI = process.env.MONGODB_URI || "your_fallback_mongodb_connection_string_here";
 
+mongoose.connection.on('error', (err) => {
+    console.error("❌ [DATABASE RUNTIME ERROR]:", err);
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.warn("⚠️ [DATABASE DISCONNECTED] Attempting automatic reconnection...");
+});
+
+mongoose.connection.on('reconnected', () => {
+    console.log("✔️ [DATABASE RECONNECTED] Connection restored to MongoDB Atlas");
+});
+
 mongoose.connect(MONGO_URI)
     .then(() => console.log("✔️ [SUCCESS] Connected securely to MongoDB Atlas database"))
-    .catch((err) => console.error("❌ [DATABASE ERROR] Failed to connect to MongoDB:", err));
+    .catch((err) => console.error("❌ [DATABASE INITIAL ERROR] Failed to connect to MongoDB:", err));
 
 // ========================================================
 // LOCAL TIMEZONE HELPERS (NIGERIA / WAT / UTC+1)
 // ========================================================
 function getFormattedNigerianTime(dateObj = new Date()) {
-    return dateObj.toLocaleTimeString('en-US', {
-        timeZone: 'Africa/Lagos',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-    });
+    try {
+        const d = (dateObj && !isNaN(new Date(dateObj))) ? new Date(dateObj) : new Date();
+        return d.toLocaleTimeString('en-US', {
+            timeZone: 'Africa/Lagos',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    } catch (err) {
+        console.error("Time formatting error:", err);
+        return "--:--";
+    }
 }
 
 function getNigerianDateString(dateObj = new Date()) {
-    return new Date(dateObj).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    try {
+        const d = (dateObj && !isNaN(new Date(dateObj))) ? new Date(dateObj) : new Date();
+        return new Date(d).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    } catch (err) {
+        console.error("Date formatting error:", err);
+        return new Date().toISOString().split('T')[0];
+    }
 }
 
 // ========================================================
@@ -171,7 +195,7 @@ app.use(express.static(path.join(__dirname)));
 // ========================================================
 
 // 1. ADMIN DATA PANEL FEED
-app.get('/api/admin/data', async (req, res) => {
+app.get('/api/admin/data', async (req, res, next) => {
     try {
         const employeeList = await Employee.find({}).lean();
         const activeLogs = await AttendanceLog.find({}).sort({ checkInTimeRaw: -1 }).lean();
@@ -219,14 +243,18 @@ app.get('/api/admin/data', async (req, res) => {
         });
     } catch (err) {
         console.error("Admin data fetch failed:", err);
-        res.status(500).json({ success: false, message: "Database read error." });
+        next(err);
     }
 });
 
 // 1B. EMPLOYEE HISTORY & MISSED DAYS ENGINE
-app.get('/api/admin/employee-history/:id', async (req, res) => {
+app.get('/api/admin/employee-history/:id', async (req, res, next) => {
     try {
-        const id = req.params.id.trim().toUpperCase();
+        if (!req.params.id) {
+            return res.status(400).json({ success: false, message: "ID parameter missing." });
+        }
+
+        const id = String(req.params.id).trim().toUpperCase();
         const employee = await Employee.findOne({ id }).lean();
 
         if (!employee) {
@@ -296,14 +324,14 @@ app.get('/api/admin/employee-history/:id', async (req, res) => {
 
     } catch (err) {
         console.error("Employee history audit failed:", err);
-        res.status(500).json({ success: false, message: "History audit database error." });
+        next(err);
     }
 });
 
 // 2. BROADCAST NOTICE
-app.post('/api/admin/notice', async (req, res) => {
+app.post('/api/admin/notice', async (req, res, next) => {
     try {
-        const noticeText = req.body.notice ? req.body.notice.trim() : null;
+        const noticeText = (req.body && req.body.notice && typeof req.body.notice === 'string') ? req.body.notice.trim() : null;
         if (noticeText) {
             await Notice.findOneAndUpdate({}, { noticeText }, { upsert: true, new: true });
             return res.json({ success: true, message: "Notice successfully saved to database!" });
@@ -311,16 +339,16 @@ app.post('/api/admin/notice', async (req, res) => {
         res.status(400).json({ success: false, message: "Notice parameter missing." });
     } catch (err) {
         console.error("Notice update failed:", err);
-        res.status(500).json({ success: false, message: "Notice database update failed." });
+        next(err);
     }
 });
 
 // 3. REGISTER STAFF PROFILE
-app.post(['/api/employees', '/api/admin/register'], async (req, res) => {
+app.post(['/api/employees', '/api/admin/register'], async (req, res, next) => {
     try {
-        const { id, name, requiredHours, shiftHours, cutoffHour, cutoffMinute, workDays } = req.body;
+        const { id, name, requiredHours, shiftHours, cutoffHour, cutoffMinute, workDays } = req.body || {};
         
-        if (!id || !name || !id.trim() || !name.trim()) {
+        if (!id || !name || typeof id !== 'string' || typeof name !== 'string' || !id.trim() || !name.trim()) {
             return res.status(400).json({ success: false, message: "Missing ID or Name parameters." });
         }
         
@@ -348,7 +376,7 @@ app.post(['/api/employees', '/api/admin/register'], async (req, res) => {
         });
     } catch (err) {
         console.error("Registration error:", err);
-        res.status(500).json({ success: false, message: "Database write error during registration." });
+        next(err);
     }
 });
 
@@ -373,13 +401,13 @@ app.get('/api/attendance/active-count', async (req, res) => {
 });
 
 // 6. LIVE SESSION CHECK FOR USERS
-app.get('/api/attendance/status/:id', async (req, res) => {
+app.get('/api/attendance/status/:id', async (req, res, next) => {
     try {
         if (!req.params.id) {
             return res.status(400).json({ status: "error", message: "ID parameter missing" });
         }
 
-        const id = req.params.id.trim().toUpperCase();
+        const id = String(req.params.id).trim().toUpperCase();
         const employee = await Employee.findOne({ id });
         
         if (!employee) {
@@ -436,16 +464,16 @@ app.get('/api/attendance/status/:id', async (req, res) => {
 
     } catch (err) {
         console.error("Status query error:", err);
-        res.status(500).json({ status: "error" });
+        next(err);
     }
 });
 
 // 7. SECURE SIGN IN/OUT PROCESSOR
-app.post('/api/attendance', async (req, res) => {
+app.post('/api/attendance', async (req, res, next) => {
     try {
-        const { employeeId, action, lat, lon, deviceId } = req.body;
+        const { employeeId, action, lat, lon, deviceId } = req.body || {};
         
-        if (!employeeId || !employeeId.trim()) {
+        if (!employeeId || typeof employeeId !== 'string' || !employeeId.trim()) {
             return res.status(400).json({ success: false, message: "Employee ID is required." });
         }
 
@@ -485,7 +513,7 @@ app.post('/api/attendance', async (req, res) => {
                 return res.status(403).json({ success: false, message: `Check-in window closed at ${formattedCutoff}.` });
             }
 
-            if (!deviceId || !deviceId.trim()) {
+            if (!deviceId || typeof deviceId !== 'string' || !deviceId.trim()) {
                 return res.status(400).json({ success: false, message: "Device fingerprint missing." });
             }
 
@@ -528,18 +556,18 @@ app.post('/api/attendance', async (req, res) => {
         res.status(400).json({ success: false, message: "System anomaly: Unrecognized action." });
     } catch (err) {
         console.error("Attendance transaction error:", err);
-        res.status(500).json({ success: false, message: "Database transaction failed." });
+        next(err);
     }
 });
 
 // 8. DELETE STAFF MEMBER
-app.delete('/api/employees/:id', async (req, res) => {
+app.delete('/api/employees/:id', async (req, res, next) => {
     try {
         if (!req.params.id) {
             return res.status(400).json({ success: false, message: "ID parameter required." });
         }
 
-        const id = req.params.id.trim().toUpperCase();
+        const id = String(req.params.id).trim().toUpperCase();
         const deleted = await Employee.findOneAndDelete({ id });
 
         if (deleted) {
@@ -550,16 +578,16 @@ app.delete('/api/employees/:id', async (req, res) => {
         res.status(404).json({ success: false, message: "ID not found." });
     } catch (err) {
         console.error("Delete employee error:", err);
-        res.status(500).json({ success: false, message: "Failed to drop staff record." });
+        next(err);
     }
 });
 
 // 9. ABSENCE SUBMISSIONS
-app.post('/api/absence-report', async (req, res) => {
+app.post('/api/absence-report', async (req, res, next) => {
     try {
-        const { employeeId, reason } = req.body;
+        const { employeeId, reason } = req.body || {};
         
-        if (!employeeId || !reason || !employeeId.trim() || !reason.trim()) {
+        if (!employeeId || !reason || typeof employeeId !== 'string' || typeof reason !== 'string' || !employeeId.trim() || !reason.trim()) {
             return res.status(400).json({ success: false, message: "Employee ID and reason are required." });
         }
 
@@ -580,8 +608,22 @@ app.post('/api/absence-report', async (req, res) => {
         res.json({ success: true, message: "Absence ticket logged in MongoDB!" });
     } catch (err) {
         console.error("Absence logging error:", err);
-        res.status(500).json({ success: false, message: "Could not log absence ticket." });
+        next(err);
     }
+});
+
+// ========================================================
+// GLOBAL EXPRESS ERROR-HANDLING MIDDLEWARE
+// ========================================================
+app.use((err, req, res, next) => {
+    console.error("❌ [EXPRESS ROUTE ERROR]:", err);
+    if (res.headersSent) {
+        return next(err);
+    }
+    res.status(500).json({ 
+        success: false, 
+        message: "Internal server processing error." 
+    });
 });
 
 // ========================================================

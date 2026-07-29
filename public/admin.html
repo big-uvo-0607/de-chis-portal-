@@ -144,85 +144,164 @@
 </div>
 
 <script>
+    // ========================================================
+    // GLOBAL FRONTEND ANTI-CRASH SHIELD
+    // ========================================================
+    window.onerror = function(msg, url, line) {
+        console.error("Caught Admin UI Error:", msg, "at line:", line);
+        return true; 
+    };
+
+    window.onunhandledrejection = function(event) {
+        console.error("Unhandled Promise Rejection in Admin Panel:", event.reason);
+    };
+
     let globalLogsArray = [];
 
     function toggleAbsenceLog() {
-        const panel = document.getElementById('absenceCardAdmin');
-        const btn = document.getElementById('toggleAbsenceBtn');
-        if (panel.style.display === "block") {
-            panel.style.display = "none";
-            btn.innerText = "View Absence Reports";
-        } else {
-            panel.style.display = "block";
-            btn.innerText = "Hide Absence Reports";
+        try {
+            const panel = document.getElementById('absenceCardAdmin');
+            const btn = document.getElementById('toggleAbsenceBtn');
+            if (!panel || !btn) return;
+
+            if (panel.style.display === "block") {
+                panel.style.display = "none";
+                btn.innerText = "View Absence Reports";
+            } else {
+                panel.style.display = "block";
+                btn.innerText = "Hide Absence Reports";
+            }
+        } catch (err) {
+            console.error("Error toggling absence log display:", err);
         }
     }
 
     async function loadDashboardData() {
         try {
-            const res = await fetch('/api/admin/data');
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s network timeout protection
+
+            const res = await fetch('/api/admin/data', { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (!res.ok) throw new Error(`HTTP Error Status: ${res.status}`);
+            
             const data = await res.json();
             
             const employees = data.employeeList || data.workers || data.employees || [];
             globalLogsArray = data.logs || [];
             const absenceReports = data.absenceReports || [];
 
-            document.getElementById('statTotalStaff').innerText = employees.length;
-            document.getElementById('statActiveNow').innerText = globalLogsArray.filter(l => l && !l.checkOut).length;
-            document.getElementById('statFlaggedCount').innerText = globalLogsArray.filter(l => l && l.flagged).length;
+            const totalStaffEl = document.getElementById('statTotalStaff');
+            const activeNowEl = document.getElementById('statActiveNow');
+            const flaggedEl = document.getElementById('statFlaggedCount');
 
-            if (data.currentNotice || data.notice) {
-                document.getElementById('activeNoticeBanner').innerHTML = `<strong>Active:</strong> ${data.currentNotice || data.notice}`;
-            } else {
-                document.getElementById('activeNoticeBanner').innerHTML = `<strong>Active:</strong> No current announcements posted.`;
+            if (totalStaffEl) totalStaffEl.innerText = employees.length;
+            if (activeNowEl) activeNowEl.innerText = globalLogsArray.filter(l => l && !l.checkOut).length;
+            
+            // ACCURATE FLAGGED COUNT (Only count genuinely flagged records)
+            if (flaggedEl) {
+                flaggedEl.innerText = globalLogsArray.filter(l => {
+                    if (!l) return false;
+                    const isOnShift = !l.checkOut;
+                    const isLate = !!l.late;
+                    const isEarly = !!l.early;
+                    // Active workers on shift are only flagged if check-in was late
+                    return isOnShift ? isLate : (isLate || isEarly || l.flagged);
+                }).length;
             }
 
-            document.querySelector('#rosterTable tbody').innerHTML = employees.map(e => {
-                if (!e) return '';
-                return `<tr><td>${e.id || ''}</td><td>${e.name || ''}</td><td><button class="view-log-btn" onclick="openWorkerHistory('${e.id}')">Logs & Missed Days</button></td></tr>`;
-            }).join('');
+            const noticeBanner = document.getElementById('activeNoticeBanner');
+            if (noticeBanner) {
+                if (data.currentNotice || data.notice) {
+                    noticeBanner.innerHTML = `<strong>Active:</strong> ${data.currentNotice || data.notice}`;
+                } else {
+                    noticeBanner.innerHTML = `<strong>Active:</strong> No current announcements posted.`;
+                }
+            }
+
+            const rosterTbody = document.querySelector('#rosterTable tbody');
+            if (rosterTbody) {
+                rosterTbody.innerHTML = employees.map(e => {
+                    if (!e) return '';
+                    return `<tr><td>${e.id || ''}</td><td>${e.name || ''}</td><td><button class="view-log-btn" onclick="openWorkerHistory('${e.id}')">Logs & Missed Days</button></td></tr>`;
+                }).join('');
+            }
             
-            document.querySelector('#absenceTable tbody').innerHTML = absenceReports.map(a => {
-                if (!a) return '';
-                return `<tr><td>${a.date || ''}</td><td>${a.id || ''}</td><td>${a.name || ''}</td><td><strong>${a.reason || ''}</strong></td><td>${a.submittedAt || ''}</td></tr>`;
-            }).join('');
+            const absenceTbody = document.querySelector('#absenceTable tbody');
+            if (absenceTbody) {
+                absenceTbody.innerHTML = absenceReports.map(a => {
+                    if (!a) return '';
+                    return `<tr><td>${a.date || ''}</td><td>${a.id || ''}</td><td>${a.name || ''}</td><td><strong>${a.reason || ''}</strong></td><td>${a.submittedAt || ''}</td></tr>`;
+                }).join('');
+            }
 
             applyFiltersAndRender();
 
         } catch (err) {
-            console.error("Dashboard failed to reload automatically:", err);
+            console.error("Dashboard data sync notice:", err.message || err);
         }
     }
 
     function applyFiltersAndRender() {
-        const searchInput = document.getElementById('searchBar').value.toLowerCase().trim();
-        const selectedDate = document.getElementById('dateFilter').value;
+        try {
+            const searchEl = document.getElementById('searchBar');
+            const dateEl = document.getElementById('dateFilter');
+            
+            const searchInput = searchEl ? searchEl.value.toLowerCase().trim() : '';
+            const selectedDate = dateEl ? dateEl.value : '';
 
-        const filteredLogs = globalLogsArray.filter(log => {
-            if (!log) return false;
-            const logId = (log.id || '').toLowerCase();
-            const logName = (log.name || '').toLowerCase();
-            const matchesSearch = logId.includes(searchInput) || logName.includes(searchInput);
-            const matchesDate = selectedDate ? (log.date === selectedDate) : true;
-            return matchesSearch && matchesDate;
-        });
+            const filteredLogs = globalLogsArray.filter(log => {
+                if (!log) return false;
+                const logId = (log.id || '').toLowerCase();
+                const logName = (log.name || '').toLowerCase();
+                const matchesSearch = logId.includes(searchInput) || logName.includes(searchInput);
+                const matchesDate = selectedDate ? (log.date === selectedDate) : true;
+                return matchesSearch && matchesDate;
+            });
 
-        document.querySelector('#logsTable tbody').innerHTML = filteredLogs.map(l => {
-            if (!l) return '';
-            const displayHours = (l.hoursWorked !== null && l.hoursWorked !== undefined) ? (l.hoursWorked + ' hrs') : '--';
-            return `
-                <tr class="${l.flagged ? 'flagged' : ''}">
-                    <td>${l.date || ''}</td><td>${l.id || ''}</td><td>${l.name || ''}</td><td>${l.checkIn || ''}</td>
-                    <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
-                    <td>${displayHours}</td>
-                    <td>${l.flagged ? '⚠️ FLAGGED SHIFT' : (l.checkOut ? 'Good Shift' : 'Working')}</td>
-                </tr>
-            `;
-        }).join('');
+            const logsTbody = document.querySelector('#logsTable tbody');
+            if (!logsTbody) return;
+
+            logsTbody.innerHTML = filteredLogs.map(l => {
+                if (!l) return '';
+
+                const isOnShift = !l.checkOut;
+                const isLate = !!l.late;
+                const isEarly = !!l.early;
+
+                // FIX FALSE FLAGGING: If worker is currently on shift, early exit cannot apply yet!
+                const isActuallyFlagged = isOnShift ? isLate : (isLate || isEarly || l.flagged);
+
+                let statusText = 'Working';
+                if (isActuallyFlagged) {
+                    statusText = '⚠️ FLAGGED SHIFT';
+                } else if (l.checkOut) {
+                    statusText = 'Good Shift';
+                }
+
+                const displayHours = (l.hoursWorked !== null && l.hoursWorked !== undefined) ? (l.hoursWorked + ' hrs') : '--';
+                
+                return `
+                    <tr class="${isActuallyFlagged ? 'flagged' : ''}">
+                        <td>${l.date || ''}</td>
+                        <td>${l.id || ''}</td>
+                        <td>${l.name || ''}</td>
+                        <td>${l.checkIn || ''}</td>
+                        <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
+                        <td>${displayHours}</td>
+                        <td>${statusText}</td>
+                    </tr>
+                `;
+            }).join('');
+        } catch (err) {
+            console.error("Render filtering error:", err);
+        }
     }
 
     async function openWorkerHistory(workerId) {
         try {
+            if (!workerId) return;
             const res = await fetch(`/api/admin/employee-history/${workerId}`);
             const data = await res.json();
             
@@ -230,54 +309,75 @@
                 return alert(data.message || "Failed to load worker logs.");
             }
 
-            document.getElementById('modalWorkerName').innerText = `${data.employee.name} [${data.employee.id}]`;
+            const modalWorkerName = document.getElementById('modalWorkerName');
+            const modalSummary = document.getElementById('modalSummary');
+            const modalTimelineBody = document.getElementById('modalTimelineBody');
+            const historyModal = document.getElementById('historyModal');
+
+            if (modalWorkerName) modalWorkerName.innerText = `${data.employee.name} [${data.employee.id}]`;
             
-            document.getElementById('modalSummary').innerHTML = `
-                <strong>Shift Duration Target:</strong> ${data.employee.shiftHours || 10} Hours<br>
-                <strong>Days Present:</strong> ${data.totalPresentDays} | 
-                <strong>Absences Filed:</strong> ${data.totalAbsencesReported} | 
-                <strong style="color: #c62828;">Total Missed Days: ${data.totalMissedDays}</strong>
-            `;
+            if (modalSummary) {
+                modalSummary.innerHTML = `
+                    <strong>Shift Duration Target:</strong> ${data.employee.shiftHours || 10} Hours<br>
+                    <strong>Days Present:</strong> ${data.totalPresentDays} | 
+                    <strong>Absences Filed:</strong> ${data.totalAbsencesReported} | 
+                    <strong style="color: #c62828;">Total Missed Days: ${data.totalMissedDays}</strong>
+                `;
+            }
 
-            document.getElementById('modalTimelineBody').innerHTML = data.timeline.map(item => {
-                if (item.type === 'PRESENT') {
-                    return `<tr><td>${item.date}</td><td><span class="present-badge">PRESENT</span></td><td>${item.checkIn}</td><td>${item.checkOut}</td></tr>`;
-                } else if (item.type === 'ABSENCE_REPORTED') {
-                    return `<tr><td>${item.date}</td><td><span class="absence-badge">EXCUSED ABSENCE</span></td><td colspan="2">Reason: ${item.reason}</td></tr>`;
-                } else {
-                    return `<tr style="background:#ffebee;"><td>${item.date}</td><td><span class="missed-badge">MISSED DAY</span></td><td colspan="2" style="color:#c62828; font-weight:bold;">Did not check in or file absence</td></tr>`;
-                }
-            }).join('');
+            if (modalTimelineBody && data.timeline) {
+                modalTimelineBody.innerHTML = data.timeline.map(item => {
+                    if (!item) return '';
+                    if (item.type === 'PRESENT') {
+                        return `<tr><td>${item.date}</td><td><span class="present-badge">PRESENT</span></td><td>${item.checkIn}</td><td>${item.checkOut}</td></tr>`;
+                    } else if (item.type === 'ABSENCE_REPORTED') {
+                        return `<tr><td>${item.date}</td><td><span class="absence-badge">EXCUSED ABSENCE</span></td><td colspan="2">Reason: ${item.reason}</td></tr>`;
+                    } else {
+                        return `<tr style="background:#ffebee;"><td>${item.date}</td><td><span class="missed-badge">MISSED DAY</span></td><td colspan="2" style="color:#c62828; font-weight:bold;">Did not check in or file absence</td></tr>`;
+                    }
+                }).join('');
+            }
 
-            document.getElementById('historyModal').style.display = 'flex';
+            if (historyModal) historyModal.style.display = 'flex';
         } catch (err) {
             alert("Could not load employee missed days history.");
         }
     }
 
     function closeHistoryModal() {
-        document.getElementById('historyModal').style.display = 'none';
+        try {
+            const modal = document.getElementById('historyModal');
+            if (modal) modal.style.display = 'none';
+        } catch (err) {
+            console.error("Modal close error:", err);
+        }
     }
 
     async function registerEmployee() {
-        const id = document.getElementById('newId').value.trim();
-        const name = document.getElementById('newName').value.trim();
-        const requiredHours = document.getElementById('requiredHours').value;
-        const hourInput = document.getElementById('cutoffHour').value;
-        const minuteInput = document.getElementById('cutoffMinute').value;
-        
-        if(!id || !name) return alert("Please fill in both ID and Name parameters!");
-
-        const payload = { 
-            id: id, 
-            name: name, 
-            requiredHours: requiredHours ? parseFloat(requiredHours) : 10,
-            shiftHours: requiredHours ? parseFloat(requiredHours) : 10,
-            cutoffHour: hourInput !== "" ? parseInt(hourInput) : 8,
-            cutoffMinute: minuteInput !== "" ? parseInt(minuteInput) : 0
-        };
-
         try {
+            const idEl = document.getElementById('newId');
+            const nameEl = document.getElementById('newName');
+            const reqHoursEl = document.getElementById('requiredHours');
+            const hourInputEl = document.getElementById('cutoffHour');
+            const minInputEl = document.getElementById('cutoffMinute');
+
+            const id = idEl ? idEl.value.trim() : '';
+            const name = nameEl ? nameEl.value.trim() : '';
+            const requiredHours = reqHoursEl ? reqHoursEl.value : '';
+            const hourInput = hourInputEl ? hourInputEl.value : '';
+            const minuteInput = minInputEl ? minInputEl.value : '';
+            
+            if(!id || !name) return alert("Please fill in both ID and Name parameters!");
+
+            const payload = { 
+                id: id, 
+                name: name, 
+                requiredHours: requiredHours ? parseFloat(requiredHours) : 10,
+                shiftHours: requiredHours ? parseFloat(requiredHours) : 10,
+                cutoffHour: hourInput !== "" ? parseInt(hourInput) : 8,
+                cutoffMinute: minuteInput !== "" ? parseInt(minuteInput) : 0
+            };
+
             const res = await fetch('/api/employees', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -287,11 +387,11 @@
             alert(data.message || "Registration response received!");
             
             if(data.success) {
-                document.getElementById('newId').value = '';
-                document.getElementById('newName').value = '';
-                document.getElementById('requiredHours').value = '';
-                document.getElementById('cutoffHour').value = '';
-                document.getElementById('cutoffMinute').value = '';
+                if (idEl) idEl.value = '';
+                if (nameEl) nameEl.value = '';
+                if (reqHoursEl) reqHoursEl.value = '';
+                if (hourInputEl) hourInputEl.value = '';
+                if (minInputEl) minInputEl.value = '';
                 loadDashboardData();
             }
         } catch (err) {
@@ -300,10 +400,11 @@
     }
 
     async function submitNotice() {
-        const text = document.getElementById('noticeText').value.trim();
-        if(!text) return alert("Please enter an announcement notice first!");
-
         try {
+            const noticeTextEl = document.getElementById('noticeText');
+            const text = noticeTextEl ? noticeTextEl.value.trim() : '';
+            if(!text) return alert("Please enter an announcement notice first!");
+
             const res = await fetch('/api/admin/notice', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -311,21 +412,30 @@
             });
             const data = await res.json();
             alert(data.message || "Notice successfully broadcasted!");
-            document.getElementById('noticeText').value = '';
+            if (noticeTextEl) noticeTextEl.value = '';
             loadDashboardData();
         } catch (err) {
             alert("Notice broadcast configuration saved successfully locally.");
-            document.getElementById('activeNoticeBanner').innerHTML = `<strong>Active:</strong> ${text}`;
+            const banner = document.getElementById('activeNoticeBanner');
+            if (banner) banner.innerHTML = `<strong>Active:</strong> ${text}`;
         }
     }
 
     document.addEventListener("DOMContentLoaded", function() {
-        document.getElementById('toggleAbsenceBtn').addEventListener('click', toggleAbsenceLog);
-        document.getElementById('registerWorkerBtn').addEventListener('click', registerEmployee);
-        document.getElementById('broadcastNoticeBtn').addEventListener('click', submitNotice);
-        
-        loadDashboardData();
-        setInterval(loadDashboardData, 3000);
+        try {
+            const toggleBtn = document.getElementById('toggleAbsenceBtn');
+            const registerBtn = document.getElementById('registerWorkerBtn');
+            const noticeBtn = document.getElementById('broadcastNoticeBtn');
+
+            if (toggleBtn) toggleBtn.addEventListener('click', toggleAbsenceLog);
+            if (registerBtn) registerBtn.addEventListener('click', registerEmployee);
+            if (noticeBtn) noticeBtn.addEventListener('click', submitNotice);
+            
+            loadDashboardData();
+            setInterval(loadDashboardData, 3000);
+        } catch (err) {
+            console.error("Initialization error:", err);
+        }
     });
 </script>
 </body>
