@@ -5,13 +5,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ========================================================
-// GLOBAL CRASH SHIELDS (PREVENT SERVER CRASHES)
+// GLOBAL CRASH SHIELDS
 // ========================================================
 process.on('uncaughtException', (err) => {
     console.error('❌ [CRITICAL UNCAUGHT EXCEPTION]:', err && err.stack ? err.stack : err);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason) => {
     console.error('❌ [UNHANDLED PROMISE REJECTION]:', reason && reason.stack ? reason.stack : reason);
 });
 
@@ -20,9 +20,9 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ========================================================
-// MONGODB CONNECTION SETUP & AUTO-RECONNECT SHIELD
+// MONGODB CONNECTION SETUP
 // ========================================================
-const MONGO_URI = process.env.MONGODB_URI || "your_fallback_mongodb_connection_string_here";
+const MONGO_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/de_chis_stores";
 
 mongoose.connection.on('error', (err) => {
     console.error("❌ [DATABASE RUNTIME ERROR]:", err);
@@ -37,7 +37,7 @@ mongoose.connection.on('reconnected', () => {
 });
 
 mongoose.connect(MONGO_URI)
-    .then(() => console.log("✔️ [SUCCESS] Connected securely to MongoDB Atlas database"))
+    .then(() => console.log("✔️ [SUCCESS] Connected securely to MongoDB database"))
     .catch((err) => console.error("❌ [DATABASE INITIAL ERROR] Failed to connect to MongoDB:", err));
 
 // ========================================================
@@ -78,7 +78,6 @@ const EmployeeSchema = new mongoose.Schema({
     shiftHours: { type: Number, default: 10 },
     cutoffHour: { type: Number, default: 8 },
     cutoffMinute: { type: Number, default: 0 },
-    // 0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday
     workDays: { type: [Number], default: [1, 2, 3, 4, 5, 6] }
 }, { timestamps: true });
 
@@ -112,7 +111,6 @@ const NoticeSchema = new mongoose.Schema({
 
 const Notice = mongoose.model('Notice', NoticeSchema);
 
-// Helper function to get or initialize the notice
 async function getNoticeText() {
     try {
         let noticeObj = await Notice.findOne();
@@ -213,7 +211,7 @@ app.get('/api/admin/data', async (req, res, next) => {
             if (log.status === 'completed') {
                 checkOutDisplay = log.checkOutTimeFormatted || (log.checkOutTimeRaw ? getFormattedNigerianTime(new Date(log.checkOutTimeRaw)) : 'Finalized');
             } else if (log.status === 'LEFT') {
-                checkOutDisplay = 'LEFT (SYSTEM RESET)';
+                checkOutDisplay = log.checkOutTimeFormatted || 'LEFT (SYSTEM RESET)';
             }
 
             let calculatedHours = emp.shiftHours || 10;
@@ -426,7 +424,7 @@ app.get('/api/attendance/status/:id', async (req, res, next) => {
             if (checkInDate < startOfToday) {
                 currentLog.status = 'LEFT';
                 currentLog.checkOutTimeRaw = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate(), 23, 59, 59);
-                currentLog.checkOutTimeFormatted = "11:59 PM";
+                currentLog.checkOutTimeFormatted = "11:59 PM (Auto)";
                 await currentLog.save();
 
                 const todayCompleted = await AttendanceLog.findOne({
@@ -627,13 +625,59 @@ app.use((err, req, res, next) => {
 });
 
 // ========================================================
-// FREE HOSTING KEEP-ALIVE SYSTEM
+// FREE HOSTING KEEP-ALIVE & AUTOMATIC SWEEPER
 // ========================================================
 setInterval(() => {
     if (mongoose.connection.readyState === 1) {
         AttendanceLog.estimatedDocumentCount().catch(() => {});
     }
 }, 5 * 60 * 1000);
+
+// AUTOMATIC MIDNIGHT SWEEPER FOR UNCLOSED SHIFTS ("LEFT")
+async function runMidnightAutoClose() {
+    try {
+        if (mongoose.connection.readyState !== 1) return;
+
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        // Find all abandoned shifts checked in BEFORE today that are still active
+        const abandonedLogs = await AttendanceLog.find({
+            status: 'checked_in',
+            checkInTimeRaw: { $lt: startOfToday }
+        });
+
+        if (abandonedLogs.length === 0) return;
+
+        let closedCount = 0;
+        for (const log of abandonedLogs) {
+            const checkInDate = new Date(log.checkInTimeRaw);
+            
+            // Set checkout to 11:59:59 PM on the day the employee originally checked in
+            const midnightAutoCheckout = new Date(
+                checkInDate.getFullYear(),
+                checkInDate.getMonth(),
+                checkInDate.getDate(),
+                23, 59, 59, 999
+            );
+
+            log.status = 'LEFT';
+            log.checkOutTimeRaw = midnightAutoCheckout;
+            log.checkOutTimeFormatted = '11:59 PM (Auto)';
+            await log.save();
+
+            closedCount++;
+        }
+
+        console.log(`🧹 [AUTO-SWEEPER] Auto-closed ${closedCount} abandoned shift(s) at midnight.`);
+    } catch (err) {
+        console.error("❌ [AUTO-SWEEPER ERROR]:", err);
+    }
+}
+
+// Run immediately on server startup, then poll every 15 minutes
+runMidnightAutoClose();
+setInterval(runMidnightAutoClose, 15 * 60 * 1000);
 
 app.listen(PORT, () => {
     console.log(`[DE CHIS STORES PORTAL ENGINE LIVE AND DB ATTACHED ON PORT ${PORT}]`);

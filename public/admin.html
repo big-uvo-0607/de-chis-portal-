@@ -41,6 +41,20 @@
         
         #absenceCardAdmin { display: none; }
 
+        /* Device Permission Buttons */
+        .btn-device-allow { background: #2e7d32; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; width: auto; margin: 2px 0; display: inline-block; }
+        .btn-device-revoke { background: #c62828; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; width: auto; margin: 2px 0; display: inline-block; }
+        .device-status-badge { font-size: 11px; font-weight: bold; padding: 3px 6px; border-radius: 3px; display: inline-block; margin-bottom: 4px; }
+        .device-allowed { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        .device-restricted { background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
+
+        /* Notification Card Styles */
+        .alert-item { background: #fff; border-left: 4px solid #c62828; padding: 10px 14px; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .alert-item.fraud { border-left-color: #e65100; }
+        .alert-title { font-weight: bold; font-size: 13px; color: #1a3a5f; }
+        .alert-time { font-size: 11px; color: #777; float: right; }
+        .alert-msg { font-size: 12px; color: #333; margin-top: 4px; }
+
         /* Modal Popup Styles for Missed Days Logs */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 999; justify-content: center; align-items: center; }
         .modal-content { background: white; padding: 25px; border-radius: 8px; max-width: 650px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
@@ -86,6 +100,11 @@
                 <input type="number" id="cutoffHour" placeholder="Cutoff Hour (0-23)" min="0" max="23">
                 <input type="number" id="cutoffMinute" placeholder="Cutoff Minute (0-59)" min="0" max="59">
             </div>
+
+            <div style="margin: 8px 0; display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                <input type="checkbox" id="allowDeviceSharingCheck" style="width: auto; margin: 0;">
+                <label for="allowDeviceSharingCheck" style="cursor: pointer; font-weight: bold; color: #1a3a5f;">Allow Device Sharing / Multi-login Override</label>
+            </div>
             
             <button id="registerWorkerBtn">Add Employee</button>
         </div>
@@ -99,7 +118,20 @@
 
         <div class="card">
             <h2>Active Roster Panel</h2>
-            <table id="rosterTable"><thead><tr><th>ID</th><th>Name</th><th>Action</th></tr></thead><tbody></tbody></table>
+            <table id="rosterTable">
+                <thead>
+                    <tr><th>ID</th><th>Name</th><th>Device Shared</th><th>Actions</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- SYSTEM ALERTS & FRAUD NOTIFICATIONS CARD -->
+    <div class="card" style="border-left: 5px solid #c62828;">
+        <h2>System Audit & Cutoff Violation Alerts</h2>
+        <div id="notificationsFeed" style="max-height: 250px; overflow-y: auto; padding-right: 5px; margin-top: 10px;">
+            <p style="font-size: 13px; color: #777; font-style: italic;">No current alerts or late check-in tickets logged.</p>
         </div>
     </div>
 
@@ -158,6 +190,15 @@
 
     let globalLogsArray = [];
 
+    // Utility: Format current local YYYY-MM-DD string
+    function getTodayString() {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
     function toggleAbsenceLog() {
         try {
             const panel = document.getElementById('absenceCardAdmin');
@@ -179,7 +220,7 @@
     async function loadDashboardData() {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s network timeout protection
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
 
             const res = await fetch('/api/admin/data', { signal: controller.signal });
             clearTimeout(timeoutId);
@@ -191,22 +232,30 @@
             const employees = data.employeeList || data.workers || data.employees || [];
             globalLogsArray = data.logs || [];
             const absenceReports = data.absenceReports || [];
+            const notifications = data.notifications || [];
 
             const totalStaffEl = document.getElementById('statTotalStaff');
             const activeNowEl = document.getElementById('statActiveNow');
             const flaggedEl = document.getElementById('statFlaggedCount');
+            const todayStr = getTodayString();
 
             if (totalStaffEl) totalStaffEl.innerText = employees.length;
-            if (activeNowEl) activeNowEl.innerText = globalLogsArray.filter(l => l && !l.checkOut).length;
+
+            // Only count workers actively on shift TODAY (past days without checkout are auto-closed as LEFT)
+            if (activeNowEl) {
+                activeNowEl.innerText = globalLogsArray.filter(l => l && !l.checkOut && l.date === todayStr).length;
+            }
             
-            // ACCURATE FLAGGED COUNT (Only count genuinely flagged records)
+            // ACCURATE FLAGGED COUNT
             if (flaggedEl) {
                 flaggedEl.innerText = globalLogsArray.filter(l => {
                     if (!l) return false;
-                    const isOnShift = !l.checkOut;
+                    const isPastDayWithoutCheckout = (!l.checkOut && l.date !== todayStr);
+                    const isOnShift = (!l.checkOut && l.date === todayStr);
                     const isLate = !!l.late;
                     const isEarly = !!l.early;
-                    // Active workers on shift are only flagged if check-in was late
+                    
+                    if (isPastDayWithoutCheckout) return true; // Flag auto-midnight left shifts
                     return isOnShift ? isLate : (isLate || isEarly || l.flagged);
                 }).length;
             }
@@ -220,14 +269,32 @@
                 }
             }
 
+            // RENDER ACTIVE ROSTER WITH DEVICE SHARING PERMISSION TOGGLES
             const rosterTbody = document.querySelector('#rosterTable tbody');
             if (rosterTbody) {
                 rosterTbody.innerHTML = employees.map(e => {
                     if (!e) return '';
-                    return `<tr><td>${e.id || ''}</td><td>${e.name || ''}</td><td><button class="view-log-btn" onclick="openWorkerHistory('${e.id}')">Logs & Missed Days</button></td></tr>`;
+                    const isAllowed = !!e.allowDeviceSharing;
+                    const deviceBadge = isAllowed 
+                        ? `<span class="device-status-badge device-allowed">ALLOWED</span>`
+                        : `<span class="device-status-badge device-restricted">RESTRICTED</span>`;
+                    
+                    const toggleBtn = isAllowed
+                        ? `<button class="btn-device-revoke" onclick="revokeDeviceSharing('${e.id}')">Revoke</button>`
+                        : `<button class="btn-device-allow" onclick="allowDeviceSharing('${e.id}')">Allow</button>`;
+
+                    return `
+                        <tr>
+                            <td>${e.id || ''}</td>
+                            <td>${e.name || ''}</td>
+                            <td>${deviceBadge} ${toggleBtn}</td>
+                            <td><button class="view-log-btn" onclick="openWorkerHistory('${e.id}')">Logs & Missed Days</button></td>
+                        </tr>
+                    `;
                 }).join('');
             }
             
+            // RENDER ABSENCE REPORTS
             const absenceTbody = document.querySelector('#absenceTable tbody');
             if (absenceTbody) {
                 absenceTbody.innerHTML = absenceReports.map(a => {
@@ -236,10 +303,63 @@
                 }).join('');
             }
 
+            // RENDER ADMIN NOTIFICATIONS / LATE & FRAUD ALERTS
+            const notifFeed = document.getElementById('notificationsFeed');
+            if (notifFeed) {
+                if (notifications.length === 0) {
+                    notifFeed.innerHTML = `<p style="font-size: 13px; color: #777; font-style: italic;">No current alerts or late check-in tickets logged.</p>`;
+                } else {
+                    notifFeed.innerHTML = notifications.map(n => {
+                        const isFraud = n.type === 'DEVICE_FRAUD_ATTEMPT';
+                        const title = isFraud ? '⚠️ DEVICE FRAUD ALERT' : '⏰ LATE CHECK-IN ATTEMPT';
+                        return `
+                            <div class="alert-item ${isFraud ? 'fraud' : ''}">
+                                <span class="alert-time">${n.date || ''} @ ${n.timeFormatted || ''}</span>
+                                <div class="alert-title">${title} - ${n.employeeName} (${n.employeeId})</div>
+                                <div class="alert-msg">${n.message}</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
             applyFiltersAndRender();
 
         } catch (err) {
             console.error("Dashboard data sync notice:", err.message || err);
+        }
+    }
+
+    // ========================================================
+    // DEVICE SHARING ADMIN CONTROLS
+    // ========================================================
+    async function allowDeviceSharing(employeeId) {
+        try {
+            const res = await fetch('/api/admin/allow-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employeeId })
+            });
+            const data = await res.json();
+            alert(data.message || "Device sharing permission updated.");
+            loadDashboardData();
+        } catch (err) {
+            alert("Failed to update device permission.");
+        }
+    }
+
+    async function revokeDeviceSharing(employeeId) {
+        try {
+            const res = await fetch('/api/admin/revoke-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employeeId })
+            });
+            const data = await res.json();
+            alert(data.message || "Device sharing permission revoked.");
+            loadDashboardData();
+        } catch (err) {
+            alert("Failed to revoke device permission.");
         }
     }
 
@@ -250,6 +370,7 @@
             
             const searchInput = searchEl ? searchEl.value.toLowerCase().trim() : '';
             const selectedDate = dateEl ? dateEl.value : '';
+            const todayStr = getTodayString();
 
             const filteredLogs = globalLogsArray.filter(log => {
                 if (!log) return false;
@@ -266,18 +387,25 @@
             logsTbody.innerHTML = filteredLogs.map(l => {
                 if (!l) return '';
 
-                const isOnShift = !l.checkOut;
+                const isPastDayWithoutCheckout = (!l.checkOut && l.date !== todayStr);
+                const isOnShiftToday = (!l.checkOut && l.date === todayStr);
                 const isLate = !!l.late;
                 const isEarly = !!l.early;
 
-                // FIX FALSE FLAGGING: If worker is currently on shift, early exit cannot apply yet!
-                const isActuallyFlagged = isOnShift ? isLate : (isLate || isEarly || l.flagged);
+                const isActuallyFlagged = isPastDayWithoutCheckout ? true : (isOnShiftToday ? isLate : (isLate || isEarly || l.flagged));
 
+                let checkoutText = '<span style="color:orange; font-weight:bold;">On Shift</span>';
                 let statusText = 'Working';
-                if (isActuallyFlagged) {
-                    statusText = '⚠️ FLAGGED SHIFT';
-                } else if (l.checkOut) {
-                    statusText = 'Good Shift';
+
+                if (l.checkOut) {
+                    checkoutText = l.checkOut;
+                    statusText = isActuallyFlagged ? '⚠️ FLAGGED SHIFT' : 'Good Shift';
+                } else if (isPastDayWithoutCheckout) {
+                    // AUTO MIDNIGHT LEFT FEATURE DISPLAY
+                    checkoutText = '<span style="color:#c62828; font-weight:bold;">LEFT (Midnight Cutoff)</span>';
+                    statusText = '⚠️ AUTO-CLOSED (Forgotten Logout)';
+                } else if (isLate) {
+                    statusText = '⚠️ LATE CHECK-IN';
                 }
 
                 const displayHours = (l.hoursWorked !== null && l.hoursWorked !== undefined) ? (l.hoursWorked + ' hrs') : '--';
@@ -288,7 +416,7 @@
                         <td>${l.id || ''}</td>
                         <td>${l.name || ''}</td>
                         <td>${l.checkIn || ''}</td>
-                        <td>${l.checkOut ? l.checkOut : '<span style="color:orange">On Shift</span>'}</td>
+                        <td>${checkoutText}</td>
                         <td>${displayHours}</td>
                         <td>${statusText}</td>
                     </tr>
@@ -329,7 +457,8 @@
                 modalTimelineBody.innerHTML = data.timeline.map(item => {
                     if (!item) return '';
                     if (item.type === 'PRESENT') {
-                        return `<tr><td>${item.date}</td><td><span class="present-badge">PRESENT</span></td><td>${item.checkIn}</td><td>${item.checkOut}</td></tr>`;
+                        const checkoutDisplay = item.checkOut ? item.checkOut : 'LEFT (Midnight Cutoff)';
+                        return `<tr><td>${item.date}</td><td><span class="present-badge">PRESENT</span></td><td>${item.checkIn}</td><td>${checkoutDisplay}</td></tr>`;
                     } else if (item.type === 'ABSENCE_REPORTED') {
                         return `<tr><td>${item.date}</td><td><span class="absence-badge">EXCUSED ABSENCE</span></td><td colspan="2">Reason: ${item.reason}</td></tr>`;
                     } else {
@@ -360,12 +489,14 @@
             const reqHoursEl = document.getElementById('requiredHours');
             const hourInputEl = document.getElementById('cutoffHour');
             const minInputEl = document.getElementById('cutoffMinute');
+            const deviceCheckEl = document.getElementById('allowDeviceSharingCheck');
 
             const id = idEl ? idEl.value.trim() : '';
             const name = nameEl ? nameEl.value.trim() : '';
             const requiredHours = reqHoursEl ? reqHoursEl.value : '';
             const hourInput = hourInputEl ? hourInputEl.value : '';
             const minuteInput = minInputEl ? minInputEl.value : '';
+            const allowDeviceSharing = deviceCheckEl ? deviceCheckEl.checked : false;
             
             if(!id || !name) return alert("Please fill in both ID and Name parameters!");
 
@@ -375,7 +506,8 @@
                 requiredHours: requiredHours ? parseFloat(requiredHours) : 10,
                 shiftHours: requiredHours ? parseFloat(requiredHours) : 10,
                 cutoffHour: hourInput !== "" ? parseInt(hourInput) : 8,
-                cutoffMinute: minuteInput !== "" ? parseInt(minuteInput) : 0
+                cutoffMinute: minuteInput !== "" ? parseInt(minuteInput) : 0,
+                allowDeviceSharing: allowDeviceSharing
             };
 
             const res = await fetch('/api/employees', {
@@ -392,6 +524,7 @@
                 if (reqHoursEl) reqHoursEl.value = '';
                 if (hourInputEl) hourInputEl.value = '';
                 if (minInputEl) minInputEl.value = '';
+                if (deviceCheckEl) deviceCheckEl.checked = false;
                 loadDashboardData();
             }
         } catch (err) {
