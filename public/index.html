@@ -340,6 +340,13 @@
         let isSubmittingAbsence = false;
         let isDeletingProfile = false;
 
+        document.addEventListener("DOMContentLoaded", () => {
+            restoreSavedTheme();
+            startLiveClock();
+            updateActiveStaffCount();
+            fetchNoticeBanner();
+        });
+
         /* CLIENT ANTI-CRASH SAFETY NETS & LEAK CLEANUP */
         window.addEventListener('error', function(e) {
             console.error("Client safety caught exception:", e.error);
@@ -371,6 +378,30 @@
             if (outBtn) outBtn.disabled = false;
             if (absenceBtn) absenceBtn.disabled = false;
             if (deleteBtn) deleteBtn.disabled = false;
+        }
+
+        function showAlert(msg, type) {
+            const box = document.getElementById('alertBox');
+            if (box) {
+                box.innerText = msg;
+                box.className = type;
+                box.style.display = "block";
+            }
+        }
+
+        async function fetchNoticeBanner() {
+            try {
+                const res = await fetchWithTimeout('/api/notice', { timeout: 4000 });
+                const data = await res.json();
+                const banner = document.getElementById('noticeBanner');
+                const content = document.getElementById('noticeContent');
+                if (data.notice && data.notice.trim() !== '') {
+                    if (content) content.innerText = data.notice;
+                    if (banner) banner.style.display = 'block';
+                }
+            } catch (err) {
+                console.log("No store notice found or endpoint offline.");
+            }
         }
 
         async function fetchWithTimeout(resource, options = {}) {
@@ -622,18 +653,39 @@
             const checkInBtn = document.getElementById('checkInBtn');
             const checkOutBtn = document.getElementById('checkOutBtn');
 
+            if (!employeeId) {
+                showAlert("Please enter and verify your Assignment ID first.", "error");
+                return;
+            }
+
             isProcessingAttendance = true;
             if (checkInBtn) checkInBtn.disabled = true;
             if (checkOutBtn) checkOutBtn.disabled = true;
 
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
-                    (pos) => sendAttendance(employeeId, action, pos.coords.latitude, pos.coords.longitude),
-                    (err) => {
-                        showAlert("Location access required to confirm presence.", "error");
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        sendAttendance(employeeId, action, lat, lon);
+                    },
+                    (error) => {
+                        let msg = "Location access required to confirm presence.";
+                        if (error.code === error.PERMISSION_DENIED) {
+                            msg = "Location permission denied. Tap the tune/lock icon 🔒 in your address bar and set Location to ALLOW.";
+                        } else if (error.code === error.TIMEOUT) {
+                            msg = "Location request timed out. Make sure phone GPS is ON and try again.";
+                        } else if (error.code === error.POSITION_UNAVAILABLE) {
+                            msg = "Location unavailable. Please turn on your phone Location/GPS services.";
+                        }
+                        showAlert(msg, "error");
                         resetProcessingState();
                     },
-                    { timeout: 7000 }
+                    {
+                        enableHighAccuracy: false, // Fast read inside store buildings
+                        timeout: 10000,           // 10 second safety limit
+                        maximumAge: 60000         // Accepts location cached up to 1 min ago
+                    }
                 );
             } else {
                 showAlert("Your browser doesn't support distance validation.", "error");
@@ -705,48 +757,6 @@
                 if (submitBtn) submitBtn.disabled = false;
             }
         }
-
-        function showAlert(msg, type) {
-            const box = document.getElementById('alertBox');
-            if (box) {
-                box.innerText = msg; box.className = type; box.style.display = "block";
-            }
-        }
-
-        async function checkStoreAnnouncements() {
-            try {
-                const res = await fetchWithTimeout('/api/notice', { timeout: 4000 });
-                const data = await res.json();
-                const noticeBanner = document.getElementById('noticeBanner');
-                const noticeContent = document.getElementById('noticeContent');
-                
-                if (data.notice && data.notice !== "Welcome to DE Chis Stores Portal!") {
-                    if (noticeContent) noticeContent.innerText = data.notice;
-                    if (noticeBanner) noticeBanner.style.display = 'block';
-                } else {
-                    if (noticeBanner) noticeBanner.style.display = 'none';
-                }
-            } catch (err) {
-                console.log("Notice board core sleeping.");
-            }
-        }
-
-        /* BACKGROUND KEEP-ALIVE PULSE ENGINE */
-        function keepAliveAndSync() {
-            if (keepAliveTimer) clearInterval(keepAliveTimer);
-            keepAliveTimer = setInterval(() => {
-                checkStoreAnnouncements();
-                updateActiveStaffCount();
-            }, 45000); // Pulse every 45s to keep cloud server active
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            restoreSavedTheme();
-            startLiveClock();
-            checkStoreAnnouncements();
-            updateActiveStaffCount();
-            keepAliveAndSync();
-        });
     </script>
 </body>
 </html>
