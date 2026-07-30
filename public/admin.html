@@ -10,9 +10,82 @@
         .container { max-width: 1100px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: relative; }
         
         .header-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
+        .header-actions { display: flex; align-items: center; gap: 15px; }
         h1, h2 { color: #1a3a5f; }
         
         .admin-toggle-btn { background: #c62828; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 4px; cursor: pointer; }
+        
+        /* Message / Notification Icon & Badge */
+        .notif-bell-btn {
+            position: relative;
+            background: #1a3a5f;
+            color: white;
+            border: none;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            transition: transform 0.15s ease;
+        }
+        .notif-bell-btn:hover { transform: scale(1.05); }
+        .notif-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: #c62828;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 10px;
+            border: 2px solid white;
+            display: none;
+        }
+
+        /* Notification Dropdown Drawer */
+        .notif-drawer {
+            display: none;
+            position: absolute;
+            top: 80px;
+            right: 30px;
+            width: 380px;
+            max-width: 90vw;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+            z-index: 1000;
+            overflow: hidden;
+        }
+        .notif-drawer-header {
+            background: #1a3a5f;
+            color: white;
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .notif-drawer-actions button {
+            background: transparent;
+            color: #d4ecfc;
+            border: none;
+            font-size: 11px;
+            cursor: pointer;
+            text-decoration: underline;
+            padding: 0 4px;
+        }
+        .notif-drawer-body {
+            max-height: 380px;
+            overflow-y: auto;
+            padding: 10px;
+        }
         
         /* Analytics Grid Layout */
         .analytics-grid { display: flex; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }
@@ -51,6 +124,7 @@
         /* Notification Card Styles */
         .alert-item { background: #fff; border-left: 4px solid #c62828; padding: 10px 14px; margin-bottom: 8px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .alert-item.fraud { border-left-color: #e65100; }
+        .alert-item.absence { border-left-color: #1a3a5f; }
         .alert-title { font-weight: bold; font-size: 13px; color: #1a3a5f; }
         .alert-time { font-size: 11px; color: #777; float: right; }
         .alert-msg { font-size: 12px; color: #333; margin-top: 4px; }
@@ -71,7 +145,28 @@
 <div class="container">
     <div class="header-section">
         <h1>DE Chis Stores - System Administration Dashboard</h1>
-        <button id="toggleAbsenceBtn" class="admin-toggle-btn">View Absence Reports</button>
+        <div class="header-actions">
+            <!-- NOTIFICATION MESSAGE ICON & BADGE -->
+            <button id="notifBellBtn" class="notif-bell-btn" title="View Notifications">
+                ✉️
+                <span id="notifBadge" class="notif-badge">0</span>
+            </button>
+            <button id="toggleAbsenceBtn" class="admin-toggle-btn">View Absence Reports</button>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION DROPDOWN DRAWER -->
+    <div id="notifDrawer" class="notif-drawer">
+        <div class="notif-drawer-header">
+            <span>Notifications & Alerts</span>
+            <div class="notif-drawer-actions">
+                <button onclick="markNotificationsRead()">Mark Read</button>
+                <button onclick="clearAllBlockedAlerts()">Clear All</button>
+            </div>
+        </div>
+        <div id="notifDrawerBody" class="notif-drawer-body">
+            <p style="font-size: 12px; color: #777; font-style: italic; text-align: center;">No new alerts or reports.</p>
+        </div>
     </div>
 
     <div class="analytics-grid">
@@ -189,6 +284,8 @@
     };
 
     let globalLogsArray = [];
+    let lastKnownUnreadCount = 0;
+    let manualReadState = false;
 
     // Utility: Format current local YYYY-MM-DD string
     function getTodayString() {
@@ -217,6 +314,41 @@
         }
     }
 
+    // Toggle Notification Drawer
+    function toggleNotificationDrawer() {
+        const drawer = document.getElementById('notifDrawer');
+        if (!drawer) return;
+        if (drawer.style.display === 'block') {
+            drawer.style.display = 'none';
+        } else {
+            drawer.style.display = 'block';
+            markNotificationsRead();
+        }
+    }
+
+    function markNotificationsRead() {
+        manualReadState = true;
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+            badge.style.display = 'none';
+            badge.innerText = '0';
+        }
+    }
+
+    async function clearAllBlockedAlerts() {
+        if (!confirm("Are you sure you want to clear all late and blocked check-in alerts?")) return;
+        try {
+            const res = await fetch('/api/admin/clear-blocked-attempts', { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                alert("All blocked check-in alerts cleared successfully!");
+                loadDashboardData();
+            }
+        } catch (err) {
+            alert("Failed to clear alerts from database.");
+        }
+    }
+
     async function loadDashboardData() {
         try {
             const controller = new AbortController();
@@ -232,6 +364,7 @@
             const employees = data.employeeList || data.workers || data.employees || [];
             globalLogsArray = data.logs || [];
             const absenceReports = data.absenceReports || [];
+            const blockedAttempts = data.blockedAttempts || [];
             const notifications = data.notifications || [];
 
             const totalStaffEl = document.getElementById('statTotalStaff');
@@ -241,7 +374,7 @@
 
             if (totalStaffEl) totalStaffEl.innerText = employees.length;
 
-            // Only count workers actively on shift TODAY (past days without checkout are auto-closed as LEFT)
+            // Only count workers actively on shift TODAY
             if (activeNowEl) {
                 activeNowEl.innerText = globalLogsArray.filter(l => l && !l.checkOut && l.date === todayStr).length;
             }
@@ -255,7 +388,7 @@
                     const isLate = !!l.late;
                     const isEarly = !!l.early;
                     
-                    if (isPastDayWithoutCheckout) return true; // Flag auto-midnight left shifts
+                    if (isPastDayWithoutCheckout) return true;
                     return isOnShift ? isLate : (isLate || isEarly || l.flagged);
                 }).length;
             }
@@ -269,12 +402,61 @@
                 }
             }
 
+            // UPDATE UNREAD NOTIFICATION BADGE NUMBER (1, 2, 3...)
+            const totalAlertCount = blockedAttempts.length + absenceReports.length;
+            if (totalAlertCount > lastKnownUnreadCount) {
+                manualReadState = false; // New incoming alert resets read status
+            }
+            lastKnownUnreadCount = totalAlertCount;
+
+            const badge = document.getElementById('notifBadge');
+            if (badge) {
+                if (totalAlertCount > 0 && !manualReadState) {
+                    badge.innerText = totalAlertCount > 99 ? '99+' : totalAlertCount;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+
+            // RENDER CONSOLIDATED NOTIFICATIONS IN DRAWER
+            const drawerBody = document.getElementById('notifDrawerBody');
+            if (drawerBody) {
+                let combinedItems = [];
+
+                blockedAttempts.forEach(b => {
+                    combinedItems.push(`
+                        <div class="alert-item ${b.reason && b.reason.includes('Fraud') ? 'fraud' : ''}">
+                            <span class="alert-time">${b.date} @ ${b.attemptTimeFormatted}</span>
+                            <div class="alert-title">⛔ BLOCKED: ${b.employeeName} (${b.employeeId})</div>
+                            <div class="alert-msg">${b.reason}</div>
+                        </div>
+                    `);
+                });
+
+                absenceReports.forEach(a => {
+                    combinedItems.push(`
+                        <div class="alert-item absence">
+                            <span class="alert-time">${a.date} @ ${a.submittedAt}</span>
+                            <div class="alert-title">📋 ABSENCE REPORT: ${a.name} (${a.employeeId})</div>
+                            <div class="alert-msg">Reason: ${a.reason}</div>
+                        </div>
+                    `);
+                });
+
+                if (combinedItems.length === 0) {
+                    drawerBody.innerHTML = `<p style="font-size: 12px; color: #777; font-style: italic; text-align: center;">No new alerts or reports.</p>`;
+                } else {
+                    drawerBody.innerHTML = combinedItems.join('');
+                }
+            }
+
             // RENDER ACTIVE ROSTER WITH DEVICE SHARING PERMISSION TOGGLES
             const rosterTbody = document.querySelector('#rosterTable tbody');
             if (rosterTbody) {
                 rosterTbody.innerHTML = employees.map(e => {
                     if (!e) return '';
-                    const isAllowed = !!e.allowDeviceSharing;
+                    const isAllowed = !!e.deviceBypassAllowed || !!e.allowDeviceSharing;
                     const deviceBadge = isAllowed 
                         ? `<span class="device-status-badge device-allowed">ALLOWED</span>`
                         : `<span class="device-status-badge device-restricted">RESTRICTED</span>`;
@@ -294,32 +476,45 @@
                 }).join('');
             }
             
-            // RENDER ABSENCE REPORTS
+            // RENDER ABSENCE REPORTS TABLE
             const absenceTbody = document.querySelector('#absenceTable tbody');
             if (absenceTbody) {
                 absenceTbody.innerHTML = absenceReports.map(a => {
                     if (!a) return '';
-                    return `<tr><td>${a.date || ''}</td><td>${a.id || ''}</td><td>${a.name || ''}</td><td><strong>${a.reason || ''}</strong></td><td>${a.submittedAt || ''}</td></tr>`;
+                    return `<tr><td>${a.date || ''}</td><td>${a.employeeId || a.id || ''}</td><td>${a.name || ''}</td><td><strong>${a.reason || ''}</strong></td><td>${a.submittedAt || ''}</td></tr>`;
                 }).join('');
             }
 
-            // RENDER ADMIN NOTIFICATIONS / LATE & FRAUD ALERTS
+            // RENDER MAIN ADMIN NOTIFICATIONS / BLOCKED & LATE CHECK-IN ALERTS CARD
             const notifFeed = document.getElementById('notificationsFeed');
             if (notifFeed) {
-                if (notifications.length === 0) {
+                if (blockedAttempts.length === 0 && notifications.length === 0) {
                     notifFeed.innerHTML = `<p style="font-size: 13px; color: #777; font-style: italic;">No current alerts or late check-in tickets logged.</p>`;
                 } else {
-                    notifFeed.innerHTML = notifications.map(n => {
-                        const isFraud = n.type === 'DEVICE_FRAUD_ATTEMPT';
-                        const title = isFraud ? '⚠️ DEVICE FRAUD ALERT' : '⏰ LATE CHECK-IN ATTEMPT';
-                        return `
+                    let htmlList = [];
+                    
+                    blockedAttempts.forEach(item => {
+                        const isFraud = item.reason && item.reason.includes('Fraud');
+                        htmlList.push(`
                             <div class="alert-item ${isFraud ? 'fraud' : ''}">
+                                <span class="alert-time">${item.date} @ ${item.attemptTimeFormatted}</span>
+                                <div class="alert-title">${isFraud ? '⚠️ FRAUD BLOCK' : '⏰ CUTOFF BLOCK'} - ${item.employeeName} (${item.employeeId})</div>
+                                <div class="alert-msg">${item.reason}</div>
+                            </div>
+                        `);
+                    });
+
+                    notifications.forEach(n => {
+                        htmlList.push(`
+                            <div class="alert-item">
                                 <span class="alert-time">${n.date || ''} @ ${n.timeFormatted || ''}</span>
-                                <div class="alert-title">${title} - ${n.employeeName} (${n.employeeId})</div>
+                                <div class="alert-title">⏰ LATE CHECK-IN - ${n.employeeName} (${n.employeeId})</div>
                                 <div class="alert-msg">${n.message}</div>
                             </div>
-                        `;
-                    }).join('');
+                        `);
+                    });
+
+                    notifFeed.innerHTML = htmlList.join('');
                 }
             }
 
@@ -335,13 +530,11 @@
     // ========================================================
     async function allowDeviceSharing(employeeId) {
         try {
-            const res = await fetch('/api/admin/allow-device', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ employeeId })
+            const res = await fetch(`/api/admin/allow-device-bypass/${employeeId}`, {
+                method: 'PUT'
             });
             const data = await res.json();
-            alert(data.message || "Device sharing permission updated.");
+            alert(data.message || "Device sharing permission granted.");
             loadDashboardData();
         } catch (err) {
             alert("Failed to update device permission.");
@@ -350,13 +543,7 @@
 
     async function revokeDeviceSharing(employeeId) {
         try {
-            const res = await fetch('/api/admin/revoke-device', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ employeeId })
-            });
-            const data = await res.json();
-            alert(data.message || "Device sharing permission revoked.");
+            alert("Device bypass is automatically consumed after 1 check-in or can be managed in database.");
             loadDashboardData();
         } catch (err) {
             alert("Failed to revoke device permission.");
@@ -401,7 +588,6 @@
                     checkoutText = l.checkOut;
                     statusText = isActuallyFlagged ? '⚠️ FLAGGED SHIFT' : 'Good Shift';
                 } else if (isPastDayWithoutCheckout) {
-                    // AUTO MIDNIGHT LEFT FEATURE DISPLAY
                     checkoutText = '<span style="color:#c62828; font-weight:bold;">LEFT (Midnight Cutoff)</span>';
                     statusText = '⚠️ AUTO-CLOSED (Forgotten Logout)';
                 } else if (isLate) {
@@ -559,11 +745,24 @@
             const toggleBtn = document.getElementById('toggleAbsenceBtn');
             const registerBtn = document.getElementById('registerWorkerBtn');
             const noticeBtn = document.getElementById('broadcastNoticeBtn');
+            const notifBellBtn = document.getElementById('notifBellBtn');
 
             if (toggleBtn) toggleBtn.addEventListener('click', toggleAbsenceLog);
             if (registerBtn) registerBtn.addEventListener('click', registerEmployee);
             if (noticeBtn) noticeBtn.addEventListener('click', submitNotice);
+            if (notifBellBtn) notifBellBtn.addEventListener('click', toggleNotificationDrawer);
             
+            // Close drawer if clicking outside
+            document.addEventListener('click', function(event) {
+                const drawer = document.getElementById('notifDrawer');
+                const bell = document.getElementById('notifBellBtn');
+                if (drawer && bell && drawer.style.display === 'block') {
+                    if (!drawer.contains(event.target) && !bell.contains(event.target)) {
+                        drawer.style.display = 'none';
+                    }
+                }
+            });
+
             loadDashboardData();
             setInterval(loadDashboardData, 3000);
         } catch (err) {
