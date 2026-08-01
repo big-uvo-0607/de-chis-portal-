@@ -672,7 +672,7 @@
             }
         }
 
-        function processAttendance(action) {
+      function processAttendance(action) {
             if (isProcessingAttendance) return;
 
             const empField = document.getElementById('empId');
@@ -701,44 +701,36 @@
                         if (error.code === error.PERMISSION_DENIED) {
                             msg = "Location permission denied. Tap the tune/lock icon 🔒 in your address bar and set Location to ALLOW.";
                         } else if (error.code === error.TIMEOUT) {
-                            msg = "Location request timed out. Make sure phone GPS is ON and try again.";
-                        } else if (error.code === error.POSITION_UNAVAILABLE) {
-                            msg = "Location unavailable. Please turn on your phone Location/GPS services.";
+                            msg = "Location request timed out. Please try again.";
                         }
                         showAlert(msg, "error");
                         resetProcessingState();
                     },
-                    {
-                        enableHighAccuracy: false, // Fast read inside store buildings
-                        timeout: 30000,           // 10 second safety limit
-                        maximumAge: 60000         // Accepts location cached up to 1 min ago
-                    }
+                    { timeout: 30000, enableHighAccuracy: true }
                 );
             } else {
-                showAlert("Your browser doesn't support distance validation.", "error");
+                showAlert("Geolocation is not supported by this browser.", "error");
                 resetProcessingState();
             }
         }
 
         async function sendAttendance(employeeId, action, lat, lon) {
             try {
-                const deviceId = getDeviceId();
-                const response = await fetchWithTimeout('/api/attendance', {
+                const res = await fetchWithTimeout('/api/attendance', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ employeeId, action, lat, lon, deviceId }),
-                    timeout: 8000
+                    body: JSON.stringify({ employeeId, action, latitude: lat, longitude: lon, deviceId: getDeviceId() }),
+                    timeout: 30000
                 });
-                const data = await response.json();
-                if(data && data.success) {
-                    showAlert(data.message || "Attendance recorded successfully.", "success");
-                    await checkUserStatus(); 
-                    updateActiveStaffCount();
+                const data = await res.json();
+                if (data.success) {
+                    showAlert(data.message || "Attendance recorded successfully!", "success");
+                    checkUserStatus();
                 } else {
-                    showAlert(data ? data.message : "Attendance record failed.", "error");
+                    showAlert(data.message || "Action failed.", "error");
                 }
             } catch (err) {
-                showAlert("Network fault: Failed to transfer attendance signature data.", "error");
+                showAlert("Failed to connect to attendance server.", "error");
             } finally {
                 resetProcessingState();
             }
@@ -746,44 +738,47 @@
 
         async function submitAbsence() {
             if (isSubmittingAbsence) return;
-
-            const empInput = document.getElementById('absentEmpId');
-            const reasonInput = document.getElementById('absenceReason');
-            const employeeId = empInput ? empInput.value.trim() : "";
-            const reason = reasonInput ? reasonInput.value.trim() : "";
-            const box = document.getElementById('absenceAlert');
+            const empField = document.getElementById('absentEmpId');
+            const reasonField = document.getElementById('absenceReason');
+            const alertBox = document.getElementById('absenceAlert');
             const submitBtn = document.getElementById('submitAbsenceBtn');
-            
-            if(!employeeId || !reason) return alert("Fill in your ID and reason!");
+
+            const employeeId = empField ? empField.value.trim() : "";
+            const reason = reasonField ? reasonField.value.trim() : "";
+
+            if (!employeeId || !reason) {
+                if (alertBox) {
+                    alertBox.innerText = "Please fill in both Employee ID and Absence Details.";
+                    alertBox.className = "error";
+                    alertBox.style.display = "block";
+                }
+                return;
+            }
 
             isSubmittingAbsence = true;
             if (submitBtn) submitBtn.disabled = true;
 
             try {
-                const res = await fetchWithTimeout('/api/absence-report', {
+                const res = await fetchWithTimeout('/api/absence', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ employeeId, reason }),
-                    timeout: 6000
+                    timeout: 10000
                 });
                 const data = await res.json();
-                
-                if (box) {
-                    box.innerText = data.message || "Request submitted.";
-                    box.style.display = "block";
-                    box.className = data.success ? "success" : "error";
+                if (alertBox) {
+                    alertBox.innerText = data.message || "Ticket filed successfully.";
+                    alertBox.className = data.success ? "success" : "error";
+                    alertBox.style.display = "block";
                 }
-                
-                if(data.success) {
-                    if (empInput) empInput.value = "";
-                    if (reasonInput) reasonInput.value = "";
-                    setTimeout(() => { toggleAbsenceForm(); }, 1800);
+                if (data.success) {
+                    if (reasonField) reasonField.value = "";
                 }
             } catch (err) {
-                if (box) {
-                    box.innerText = "Network Error: Couldn't file your absence ticket.";
-                    box.className = "error";
-                    box.style.display = "block";
+                if (alertBox) {
+                    alertBox.innerText = "Error sending request to server.";
+                    alertBox.className = "error";
+                    alertBox.style.display = "block";
                 }
             } finally {
                 isSubmittingAbsence = false;
